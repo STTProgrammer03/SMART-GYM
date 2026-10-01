@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>My Profile - U FITNESS GYM</title>
+
+    <link
+        rel="stylesheet"
+        href="css/style.css"
+    >
+
+</head>
+
+<body>
+
+    <div class="dashboard-container">
+
+        <!-- Back Button -->
+
+        <button
+            class="back-button"
+            onclick="window.location.href='dashboard.html'"
+        >
+            ← Back
+        </button>
+
+
+        <!-- Profile Header -->
+
+        <div class="profile-page-header">
+
+            <h1>My Profile</h1>
+
+            <p>
+                View and manage your personal information.
+            </p>
+
+        </div>
+
+
+        <!-- Profile Card -->
+
+        <div class="profile-page-card">
+
+            <!-- Photo -->
+
+            <div class="profile-page-photo-section">
+
+                <div class="profile-page-photo">
+
+                    <img
+                        id="profilePhoto"
+                        src=""
+                        alt="Profile Photo"
+                    >
+
+                    <span id="profileIcon">
+                        👤
+                    </span>
+
+                </div>
+
+                <h2 id="profileName">
+                    Loading...
+                </h2>
+
+                <p id="profileMemberId">
+                    Member ID: —
+                </p>
+
+            </div>
+
+
+            <!-- Personal Information -->
+
+            <div class="profile-information">
+
+                <h3>
+                    Personal Information
+                </h3>
+
+
+                <div class="profile-info-row">
+
+                    <span>
+                        Full Name
+                    </span>
+
+                    <strong id="profileFullName">
+                        —
+                    </strong>
+
+                </div>
+
+
+                <div class="profile-info-row">
+
+                    <span>
+                        WhatsApp Number
+                    </span>
+
+                    <strong id="profilePhone">
+                        —
+                    </strong>
+
+                </div>
+
+
+                <div class="profile-info-row">
+
+                    <span>
+                        Email
+                    </span>
+
+                    <strong id="profileEmail">
+                        —
+                    </strong>
+
+                </div>
+
+
+                <div class="profile-info-row">
+
+                    <span>
+                        Date of Birth
+                    </span>
+
+                    <strong id="profileBirthDate">
+                        —
+                    </strong>
+
+                </div>
+
+
+                <div class="profile-info-row">
+
+                    <span>
+                        Member ID
+                    </span>
+
+                    <strong id="profileId">
+                        —
+                    </strong>
+
+                </div>
+
+            </div>
+
+
+            <!-- Actions -->
+
+            <div class="profile-actions">
+
+                <button
+    class="profile-action-button"
+    onclick="window.location.href='edit-profile.html'"
+>
+    ✏️ Edit Profile
+</button>
+
+
+                <button
+                    class="profile-action-button"
+                    onclick="alert('Face Verification coming soon.')"
+                >
+                    🔐 Face Verification
+                </button>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <script src="js/profile.js"></script>
+
+</body>
+
+</html>

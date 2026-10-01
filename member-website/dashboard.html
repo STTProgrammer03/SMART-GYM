@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Dashboard</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <div class="dashboard-container">
+
+        <div class="dashboard-header">
+            <img src="assets/logo.png" alt="U FITNESS GYM Logo" class="gym-logo">
+
+            <h1>U FITNESS GYM</h1>
+            <p>Member Portal</p>
+        </div>
+
+        <div class="dashboard-card">
+
+            <h2>Welcome Back 👋</h2>
+
+            <div class="profile-section">
+                <div class="profile-placeholder">
+    <img id="profilePhoto" src="" alt="Profile Photo">
+    <span id="profileIcon">👤</span>
+</div>
+
+                <div>
+                    <h3>Member</h3>
+                    <p>WhatsApp Member</p>
+                </div>
+            </div>
+
+            <div class="dashboard-section">
+    <h3>Membership</h3>
+
+    <div id="membershipNotification" class="membership-notification" hidden></div>
+
+    <p>No active membership information yet.</p>
+
+    <button onclick="window.location.href='membership.html'">
+        Choose Membership Plan
+    </button>
+</div>
+
+            <div class="dashboard-menu">
+
+                <button onclick="alert('Coming soon.')">
+                    💳 Payment
+                </button>
+
+                <button onclick="alert('Attendance coming soon.')">
+                    📅 Attendance
+                </button>
+
+
+                <button onclick="window.location.href='profile.html'">
+    👤 Profile
+</button>
+
+            </div>
+
+            <button class="logout-button" id="logoutButton">
+                Logout
+            </button>
+
+        </div>
+
+    </div>
+
+    <dialog id="photoDialog" aria-labelledby="photoTitle" aria-describedby="photoGuidance">
+        <div class="photo-dialog-heading">
+            <h2 id="photoTitle">Upload Profile Photo</h2>
+            <button type="button" id="closePhoto" aria-label="Close photo upload">&#10005;</button>
+        </div>
+        <p id="photoGuidance">Use a clear photo of your face for future face verification.</p>
+        <ul class="photo-requirements">
+            <li>Face clearly visible, with good lighting</li>
+            <li>Look directly at the camera</li>
+            <li>No sunglasses or face covering</li>
+            <li>One person only</li>
+        </ul>
+        <p class="photo-file-help">JPEG, PNG or WebP. Maximum 5 MB.</p>
+        <div id="photoChoices" class="photo-actions">
+            <button type="button" id="takePhoto">&#128247; Take a Picture</button>
+            <button type="button" id="choosePhoto">&#128444; Choose from Device</button>
+        </div>
+        <input id="photoFile" type="file" accept="image/jpeg,image/png,image/webp" hidden>
+        <div id="cameraPanel" hidden>
+            <video id="photoCamera" autoplay playsinline muted aria-label="Camera preview"></video>
+            <button type="button" id="capturePhoto">Take Photo</button>
+        </div>
+        <div id="previewPanel" hidden>
+            <img id="photoPreview" alt="Selected profile photo preview">
+            <div class="photo-actions">
+                <button type="button" id="retakePhoto">Retake / Choose Again</button>
+                <button type="button" id="savePhoto">Use Photo</button>
+            </div>
+        </div>
+        <p id="photoMessage" role="status" aria-live="polite"></p>
+    </dialog>
+    <script src="js/dashboard.js"></script>
+
+</body>
+</html>

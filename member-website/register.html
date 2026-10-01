@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Registration</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="login-container">
+        <div class="gym-title"><h1>U FITNESS GYM</h1><p>Member Portal</p></div>
+        <div class="login-card">
+            <h1>New Member</h1>
+            <p class="subtitle">Verify your WhatsApp number, choose a membership plan, and upload your payment receipt.</p>
+            <form id="registerForm">
+                <label for="fullName">Full Name</label>
+                <input type="text" id="fullName" autocomplete="name" maxlength="256" placeholder="Enter your full name" required>
+                <label for="phone">WhatsApp Number</label>
+                <input type="tel" id="phone" autocomplete="tel" maxlength="64" placeholder="e.g. 0167619166 or 60167619166" required>
+                <button type="button" id="sendOtpButton">Get WhatsApp OTP</button>
+                <p id="otpMessage" role="status" aria-live="polite"></p>
+                <label for="otp">WhatsApp OTP</label>
+                <input type="text" id="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code">
+                <button type="button" id="verifyOtpButton">Verify Number</button>
+                <label for="planId">Membership Plan</label>
+                <select id="planId" required disabled><option value="">Loading plans...</option></select>
+                <p id="paymentInstructions" class="registration-payment"></p>
+                <div id="registrationTotal" class="registration-payment"></div>
+                <button type="button" id="retryPlansButton" hidden>Reload Plans</button>
+                <label for="receipt">Payment Receipt</label>
+                <input type="file" id="receipt" accept="image/jpeg,image/png,image/webp" required>
+                <p class="photo-help">Upload your payment receipt as JPEG, PNG or WebP, maximum 5 MB.</p>
+                <label for="photo">Profile Photo</label>
+                <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" required>
+                <p class="photo-help">Choose a clear photo of your face. Good lighting, one person, no sunglasses or face covering. JPEG, PNG or WebP, maximum 5 MB.</p>
+                <img id="registrationPhotoPreview" alt="Selected profile photo" hidden style="width:100%;max-height:240px;object-fit:contain;margin-bottom:16px;border-radius:10px">
+                <button type="submit" id="registerButton" disabled>Submit Registration</button>
+            </form>
+            <p id="message" role="status" aria-live="polite">Your registration and payment receipt will be reviewed by the gym before membership is activated.</p>
+            <div class="register-section"><p>Already a member?</p><a href="index.html">Back to Login</a></div>
+        </div>
+    </div>
+    <script src="js/register.js?v=otp-feedback-2"></script>
+</body>
+</html>

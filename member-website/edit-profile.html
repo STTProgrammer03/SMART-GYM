@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Edit Profile - U FITNESS GYM</title>
+
+    <link
+        rel="stylesheet"
+        href="css/style.css"
+    >
+
+</head>
+
+<body>
+
+    <div class="dashboard-container">
+
+        <!-- Back Button -->
+
+        <button
+            class="back-button"
+            onclick="window.location.href='profile.html'"
+        >
+            ← Back
+        </button>
+
+
+        <!-- Page Header -->
+
+        <div class="profile-page-header">
+
+            <h1>Edit Profile</h1>
+
+            <p>
+                Update your personal information.
+            </p>
+
+        </div>
+
+
+        <!-- Edit Profile Card -->
+
+        <div class="profile-page-card">
+
+            <form id="editProfileForm">
+
+                <!-- Profile Photo -->
+
+<div class="profile-form-group">
+
+    <label for="photo">
+        Profile Photo
+    </label>
+
+   <input
+    type="file"
+    id="photo"
+    name="photo"
+    accept="image/*"
+    capture="user"
+>
+
+    <small>
+        Upload a PNG, JPG or WebP image. Maximum 5 MB.
+    </small>
+
+</div>
+
+
+                <!-- Full Name -->
+
+                <div class="profile-form-group">
+
+                    <label for="fullName">
+                        Full Name
+                    </label>
+
+                    <input
+                        type="text"
+                        id="fullName"
+                        name="fullName"
+                        readonly
+                    >
+
+                    <small>
+                        Full name cannot be changed.
+                    </small>
+
+                </div>
+
+
+                <!-- WhatsApp -->
+
+                <div class="profile-form-group">
+
+                    <label for="phone">
+                        WhatsApp Number
+                    </label>
+
+                    <input
+                        type="text"
+                        id="phone"
+                        name="phone"
+                        readonly
+                    >
+
+                    <small>
+                        WhatsApp number cannot be changed.
+                    </small>
+
+                </div>
+
+
+                <!-- Email -->
+
+                <div class="profile-form-group">
+
+                    <label for="email">
+                        Email
+                    </label>
+
+                    <input
+                        type="email"
+                        id="email"
+                        name="email"
+                        placeholder="Enter your email"
+                    >
+
+                </div>
+
+
+                <!-- Date of Birth -->
+
+                <div class="profile-form-group">
+
+                    <label for="birthDate">
+                        Date of Birth
+                    </label>
+
+                    <input
+                        type="date"
+                        id="birthDate"
+                        name="birthDate"
+                    >
+
+                </div>
+
+
+                <!-- Member ID -->
+
+                <div class="profile-form-group">
+
+                    <label for="memberId">
+                        Member ID
+                    </label>
+
+                    <input
+                        type="text"
+                        id="memberId"
+                        name="memberId"
+                        readonly
+                    >
+
+                    <small>
+                        Member ID cannot be changed.
+                    </small>
+
+                </div>
+
+
+                <!-- Message -->
+
+                <p
+                    id="editProfileMessage"
+                    class="profile-form-message"
+                ></p>
+
+
+                <!-- Buttons -->
+
+                <div class="profile-form-actions">
+
+                    <button
+                        type="submit"
+                        class="profile-save-button"
+                    >
+                        Save Changes
+                    </button>
+
+                    <button
+                        type="button"
+                        class="profile-cancel-button"
+                        onclick="window.location.href='profile.html'"
+                    >
+                        Cancel
+                    </button>
+
+                </div>
+
+            </form>
+
+        </div>
+
+    </div>
+
+
+    <script src="js/edit-profile.js"></script>
+
+</body>
+
+</html>

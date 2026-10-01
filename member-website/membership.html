@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+    <title>Membership - U FITNESS GYM</title>
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <div class="dashboard-container">
+
+        <!-- HEADER -->
+        <div class="dashboard-header">
+
+    <img
+        src="assets/logo.png"
+        alt="U FITNESS GYM"
+        class="dashboard-logo"
+    >
+
+</div>
+
+
+        <!-- PAGE TITLE -->
+        <div class="dashboard-card">
+
+            <h1>My Membership</h1>
+
+            <p class="membership-subtitle">
+                View your membership and choose a plan.
+            </p>
+
+        </div>
+
+
+        <!-- CURRENT MEMBERSHIP -->
+        <div class="dashboard-section">
+
+            <h2>Current Membership</h2>
+
+            <div id="currentMembership">
+
+    <p>Loading membership...</p>
+
+</div>
+
+<div id="renewalSection" style="display: none; margin-top: 20px;">
+
+    <h3>Renew Membership</h3>
+
+    <p>Select a membership plan to continue your renewal request.</p>
+
+    <label for="renewalReceipt">Payment receipt</label>
+    <input id="renewalReceipt" type="file" accept="image/jpeg,image/png,image/webp" required>
+    <p id="renewalMessage" role="status"></p>
+
+    <div id="renewalPlans"></div>
+
+</div>
+
+        </div>
+
+
+        <!-- AVAILABLE PLANS -->
+        <div class="dashboard-section">
+
+            <h2>Membership Plans</h2>
+
+            <div id="membershipPlans">
+
+                <p>Loading plans...</p>
+
+            </div>
+
+        </div>
+
+        <button
+    class="back-button"
+    onclick="window.location.href='dashboard.html'"
+>
+    ← Back
+</button>
+
+    </div>
+
+    
+
+
+    <script src="js/membership.js"></script>
+
+</body>
+</html>

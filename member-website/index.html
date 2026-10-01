@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Member Login</title>
+
+    <link rel="stylesheet" href="css/style.css">
+</head>
+
+<body>
+
+    <div class="login-container">
+
+        <div class="gym-title">
+
+    <img
+        src="assets/logo.png"
+        alt="U FITNESS GYM Logo"
+        class="gym-logo"
+    >
+
+    <h2>U FITNESS GYM</h2>
+
+    <p>Member Portal</p>
+
+</div>
+
+        <div class="login-card">
+
+
+            <h1>Member Login</h1>
+
+           <p class="subtitle">
+    Enter your registered WhatsApp number to receive an OTP.
+</p>
+
+<form id="loginForm">
+
+    <label for="phone">
+        WhatsApp Number
+    </label>
+
+    <input
+        type="tel"
+        id="phone"
+        placeholder="e.g. 60123456789"
+        required
+    >
+
+    <button type="submit">
+        Get WhatsApp OTP
+    </button>
+
+</form>
+
+<p id="message" role="status" aria-live="polite"></p>
+
+            <p id="message"></p>
+
+            <div class="register-section">
+
+                <p>New member?</p>
+
+                <a href="register.html">
+                    Register Here
+                </a>
+
+            </div>
+
+        </div>
+
+    </div>
+
+<script src="js/login.js?v=direct-login-2"></script>
+
+</body>
+</html>

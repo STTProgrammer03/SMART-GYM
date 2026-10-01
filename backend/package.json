@@ -1,0 +1,19 @@
+{
+  "name": "membership-website-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "check-db": "node inspect-db.js",
+    "reminders:dry-run": "node send-expiry-reminders.js --dry-run",
+    "reminders": "node send-expiry-reminders.js",
+    "test": "node --test backend.test.js member-service.test.js whatsapp.test.js"
+  },
+  "dependencies": {
+    "mssql": "^12.7.2"
+  }
+}

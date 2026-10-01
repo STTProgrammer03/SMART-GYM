@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>U FITNESS GYM | QR Enrollment</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body class="readiness-body">
+  <main class="qr-container">
+    <a class="readiness-link" href="index.html">← Member portal</a>
+    <section class="qr-card">
+      <p class="eyebrow">U FITNESS GYM · LOCAL PC ENROLLMENT</p>
+      <h1>Scan to enroll</h1>
+      <p class="qr-lead">Members scan this code with their phone, verify their phone number with OTP, then take a selfie and submit their profile.</p>
+      <div id="qrcode" class="qr-box" aria-label="Member enrollment QR code"></div>
+      <p id="qrStatus" class="qr-status" role="status"></p>
+      <label class="qr-label" for="enrollmentUrl">Enrollment URL shown in the QR code</label>
+      <div class="qr-url-row"><input id="enrollmentUrl" type="url"><button id="generateQr" type="button">Refresh QR</button></div>
+      <p class="qr-help"><strong>Local PC note:</strong> phones cannot open <code>localhost</code>. Run the website on the PC's LAN IP (for example <code>http://192.168.1.20:8080/member-website/register.html</code>) and make sure the phone and PC use the same Wi-Fi.</p>
+      <a class="qr-print" href="javascript:window.print()">Print QR code</a>
+    </section>
+  </main>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+  <script src="js/qr-enrollment.js"></script>
+</body>
+</html>
