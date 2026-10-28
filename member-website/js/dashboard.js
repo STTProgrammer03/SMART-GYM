@@ -1,5 +1,6 @@
 const API_BASE_URL = "http://localhost:3000";
 const token = sessionStorage.getItem("memberToken");
+const workspace = sessionStorage.getItem("workspace");
 if (!token) window.location.replace("index.html");
 const card = document.querySelector(".dashboard-card");
 const dialog = document.getElementById("photoDialog");
@@ -13,7 +14,7 @@ let saving = false, cameraRequest = 0;
 async function api(view, form) {
     const response = await fetch(API_BASE_URL + "/api/member-app" + (view ? "?view=" + view : ""), {
         method: form ? "POST" : "GET",
-        headers: { Authorization: "Bearer " + token },
+        headers: { Authorization: "Bearer " + token, ...(workspace ? { "X-Workspace": workspace } : {}) },
         ...(form ? { body: form } : {})
     });
     if (response.status === 401) {

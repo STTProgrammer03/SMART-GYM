@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment - U FITNESS GYM</title>
+    <link rel="stylesheet" href="css/style.css">
+
+    <style>
+        body { background: linear-gradient(135deg, #f4f7fb, #eef2f7); }
+        .login-container { padding: 32px 16px; }
+        .login-card { max-width: 520px; box-shadow: 0 18px 50px rgba(16, 24, 40, .10); }
+        .subtitle { line-height: 1.55; }
+        .order-summary {
+            border: 1px solid #dbe3ee;
+            border-radius: 16px;
+            padding: 20px;
+            margin: 24px 0;
+            background: linear-gradient(145deg, #f8fbff, #f1f5fa);
+        }
+
+        .order-title {
+            font-size: 16px;
+            font-weight: bold;
+            margin-bottom: 15px;
+        }
+
+        .order-row {
+            display: flex;
+            justify-content: space-between;
+            gap: 16px;
+            margin: 10px 0;
+            color: #667085;
+        }
+
+        .order-row strong, .order-row span:last-child { color: #101828; text-align: right; }
+
+        .order-row.total {
+            border-top: 1px solid #dbe3ee;
+            padding-top: 14px;
+            margin-top: 14px;
+            font-size: 19px;
+            font-weight: bold;
+        }
+
+        .payment-method {
+            display: flex;
+            align-items: center;
+            gap: 13px;
+            border: 1px solid #dbe3ee;
+            border-radius: 13px;
+            padding: 16px;
+            margin: 10px 0;
+            cursor: pointer;
+            background: #fff;
+            transition: border-color .2s, background .2s, box-shadow .2s, transform .2s;
+        }
+
+        .payment-method:hover {
+            border-color: #98a2b3;
+            background: #f8fafc;
+            transform: translateY(-1px);
+        }
+
+        .payment-method:has(input:checked) { border-color: #2563eb; background: #eff6ff; box-shadow: 0 0 0 3px rgba(37, 99, 235, .10); }
+
+        .payment-method input {
+            width: 18px;
+            height: 18px;
+            margin: 0;
+        }
+
+        .payment-method span {
+            font-weight: 500;
+            color: #344054;
+        }
+
+        .payment-section-title {
+            font-size: 17px;
+            font-weight: bold;
+            margin-top: 24px;
+            margin-bottom: 12px;
+        }
+
+        #paymentButton {
+            width: 100%;
+            margin-top: 24px;
+            min-height: 48px;
+            font-weight: 700;
+        }
+
+        #paymentMessage {
+            text-align: center;
+            margin-top: 15px;
+            min-height: 22px;
+            line-height: 1.45;
+        }
+
+        .payment-note { display: flex; gap: 8px; margin: 18px 0 0; color: #667085; font-size: 13px; line-height: 1.45; }
+
+        .back-link {
+            display: block;
+            text-align: center;
+            margin-top: 18px;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="login-container">
+
+    <div class="gym-title">
+        <h1>U FITNESS GYM</h1>
+        <p>Member Portal</p>
+    </div>
+
+    <div class="login-card">
+
+        <h1 id="paymentTitle">Payment</h1>
+
+        <p class="subtitle" id="paymentSubtitle">
+            Review your membership before choosing a payment method.
+        </p>
+
+        <!-- ORDER SUMMARY -->
+        <div class="order-summary">
+
+            <div class="order-title" id="orderTitle">
+                Order Summary
+            </div>
+
+            <div class="order-row">
+                <span>Membership</span>
+                <strong id="planName">Membership Plan</strong>
+            </div>
+
+            <div class="order-row">
+                <span>Membership Fee</span>
+                <span>RM <span id="planPrice">0.00</span></span>
+            </div>
+
+            <div class="order-row">
+                <span>Registration Fee</span>
+                <span>RM <span id="registrationFee">60.00</span></span>
+            </div>
+
+            <div class="order-row total">
+                <span>Total</span>
+                <span>RM <span id="paymentAmount">0.00</span></span>
+            </div>
+
+        </div>
+
+        <!-- PAYMENT METHODS -->
+        <div class="payment-section-title" id="paymentMethodTitle">
+            Choose Payment Method
+        </div>
+
+        <label class="payment-method">
+            <input
+                type="radio"
+                name="paymentMethod"
+                value="NEXGO_N86"
+            >
+            <span>💳 Debit / Credit Card</span>
+        </label>
+
+        
+
+
+        <button type="button" id="paymentButton">
+            Pay Now
+        </button>
+
+        <p id="paymentMessage" role="status"></p>
+
+        <p class="payment-note" id="paymentNote">
+            <span aria-hidden="true">🔒</span>
+            <span>Payments are securely processed through the NEXGO terminal. Membership remains pending admin approval after payment.</span>
+        </p>
+
+        <a class="back-link" href="register.html">
+            ← Back to Registration
+        </a>
+
+    </div>
+</div>
+
+<script>
+
+    const params =
+        new URLSearchParams(window.location.search);
+
+    const type =
+        params.get("type") || "registration";
+
+    const amountParam = params.get("amount");
+
+    const amount =
+        amountParam !== null && amountParam !== ""
+            ? Number(amountParam)
+            : params.get("type") === "renewal"
+                ? 70
+                : 0;
+
+    const plan =
+        params.get("plan") || "1 Week";
+
+
+    // ==========================================
+    // PAYMENT TYPE
+    // ==========================================
+
+    const isRenewal =
+        type === "renewal";
+
+
+    // ==========================================
+    // CALCULATE PRICE
+    // ==========================================
+
+    const registrationFee =
+        isRenewal ? 0 : 60;
+
+    const planPrice =
+        isRenewal
+            ? amount
+            : Math.max(0, amount - registrationFee);
+
+
+    // ==========================================
+    // PAGE TITLE
+    // ==========================================
+
+    document.getElementById("paymentTitle").textContent =
+        isRenewal
+            ? "Renew Your Membership"
+            : "New Membership Payment";
+
+
+    document.getElementById("paymentSubtitle").textContent =
+        isRenewal
+            ? "Choose your plan and complete your renewal securely through the NEXGO terminal."
+            : "Complete your new member registration payment securely through the NEXGO terminal.";
+
+    document.getElementById("orderTitle").textContent =
+        isRenewal ? "Renewal Summary" : "New Membership Summary";
+
+    document.getElementById("paymentMethodTitle").textContent =
+        isRenewal ? "Choose Renewal Payment Method" : "Choose Payment Method";
+
+
+    // ==========================================
+    // ORDER SUMMARY
+    // ==========================================
+
+    document.getElementById("planName").textContent =
+        plan;
+
+    document.getElementById("planPrice").textContent =
+        planPrice.toFixed(2);
+
+
+    // Registration fee
+    // Only show it for NEW registration
+
+    const registrationFeeRow =
+        document.getElementById("registrationFee")
+            .closest(".order-row");
+
+    if (isRenewal) {
+
+        registrationFeeRow.style.display =
+            "none";
+
+        document.getElementById("paymentNote").lastElementChild.textContent =
+            "Your renewal payment is securely processed through the NEXGO terminal. Your membership will be renewed after the payment is approved.";
+
+    } else {
+
+        registrationFeeRow.style.display =
+            "flex";
+
+        document.getElementById("registrationFee").textContent =
+            registrationFee.toFixed(2);
+
+        document.getElementById("paymentNote").lastElementChild.textContent =
+            "Your new-member payment is securely processed through the NEXGO terminal. Your registration will remain pending gym approval after payment.";
+    }
+
+
+    document.getElementById("paymentAmount").textContent =
+        amount.toFixed(2);
+
+
+   
+    document.getElementById("paymentButton")
+        .addEventListener("click", async () => {
+            const selected = document.querySelector(
+                'input[name="paymentMethod"]:checked'
+            );
+
+            const message = document.getElementById("paymentMessage");
+            const button = document.getElementById("paymentButton");
+
+            const params = new URLSearchParams(window.location.search);
+            const requestId = params.get("requestId");
+            const memberToken = sessionStorage.getItem("memberToken");
+
+            if (params.get("demo") === "true") {
+                message.textContent =
+                    "Sending RM0.10 demo payment to the NEXGO terminal...";
+                message.style.color = "#344054";
+                button.disabled = true;
+                button.textContent = "Processing...";
+
+                try {
+                    const demoResponse = await fetch(
+                        "http://localhost:3000/api/nexgo/sale-test",
+                        {
+                            method: "POST",
+                            headers: {
+                                "Content-Type": "application/json"
+                            },
+                            body: JSON.stringify({ amountCents: 10 })
+                        }
+                    );
+
+                    const demoResult = await demoResponse.json();
+
+                    if (!demoResponse.ok || !demoResult.success) {
+                        throw new Error(
+                            demoResult.message ||
+                            "The RM0.10 demo payment was not approved."
+                        );
+                    }
+
+                    message.textContent =
+                        "RM0.10 demo payment approved by the NEXGO terminal.";
+                    message.style.color = "#027a48";
+                } catch (error) {
+                    message.textContent =
+                        error.message || "Unable to complete the demo payment.";
+                    message.style.color = "#b42318";
+                } finally {
+                    button.disabled = false;
+                    button.textContent = "Pay Now";
+                }
+
+                return;
+            }
+
+            const workspace =
+                sessionStorage.getItem("workspace") ||
+                sessionStorage.getItem("memberWorkspace");
+
+            if (!selected) {
+                message.textContent = "Please choose a payment method first.";
+                message.style.color = "#b42318";
+                return;
+            }
+
+            if (selected.value !== "NEXGO_N86") {
+                message.textContent =
+                    "This payment method is not connected to NEXGO yet.";
+                message.style.color = "#b42318";
+                return;
+            }
+
+            if (!requestId || !memberToken) {
+                message.textContent =
+                    !requestId
+                        ? "No payment request was created. Return to registration and click Pay Now again."
+                        : "Your login session expired. Return to registration and sign in again.";
+                message.style.color = "#b42318";
+                return;
+            }
+
+            message.textContent =
+                "Please complete the payment on the NEXGO terminal. Do not retry if the result is uncertain.";
+            message.style.color = "#344054";
+            button.disabled = true;
+            button.textContent = "Processing...";
+
+            try {
+                const form = new FormData();
+                form.set("action", "pay-membership");
+                form.set("requestId", requestId);
+
+                const response = await fetch(
+                    "http://localhost:3000/api/member-app",
+                    {
+                        method: "POST",
+                        headers: {
+                            "Authorization": `Bearer ${memberToken}`,
+                            ...(workspace ? { "X-Workspace": workspace } : {})
+                        },
+                        body: form,
+                        signal: AbortSignal.timeout(130000)
+                    }
+                );
+
+                let result;
+
+                try {
+                    result = await response.json();
+                } catch {
+                    throw new Error(
+                        `Backend returned an invalid response (HTTP ${response.status}). Check the payment status before trying again.`
+                    );
+                }
+
+                if (!response.ok) {
+                    throw new Error(
+                        result.error ||
+                        "Payment request failed. Check the payment status before retrying."
+                    );
+                }
+
+                if (result.paymentStatus === "PAID" &&
+                    result.success === true) {
+                    message.textContent =
+                        "Payment confirmed. Your membership is now active.";
+                    message.style.color = "#027a48";
+                    window.setTimeout(() => {
+                        window.location.replace("dashboard.html");
+                    }, 800);
+                } else if (result.paymentStatus === "FAILED") {
+                    message.textContent =
+                        result.message ||
+                        "Payment was not approved. Check the terminal before trying again.";
+                    message.style.color = "#b42318";
+                } else {
+                    message.textContent =
+                        result.message ||
+                        "Payment status is uncertain. Check the NEXGO terminal and transaction record before retrying.";
+                    message.style.color = "#b54708";
+                }
+            } catch (error) {
+                message.textContent =
+                    error.message ||
+                    "Unable to confirm payment. Check the terminal and transaction record before retrying.";
+                message.style.color = "#b54708";
+            } finally {
+                button.disabled = false;
+                button.textContent = "Pay Now";
+            }
+        });
+
+    // ==========================================
+    // BACK LINK
+    // ==========================================
+
+    const backLink =
+        document.querySelector(".back-link");
+
+
+    if (isRenewal) {
+
+        backLink.href =
+            "membership.html";
+
+        backLink.textContent =
+            "← Back to Membership";
+
+    } else {
+
+        backLink.href =
+            "register.html";
+
+        backLink.textContent =
+            "← Back to Registration";
+
+    }
+
+</script>
+
+</body>
+</html>

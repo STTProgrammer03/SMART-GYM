@@ -1,4 +1,6 @@
 ﻿const API_BASE_URL = "http://localhost:3000";
+const workspace = sessionStorage.getItem("workspace") || "";
+const workspaceHeaders = workspace ? { "X-Workspace": workspace } : {};
 let registrationFeeCents = 0;
 const registerForm = document.getElementById("registerForm");
 const photoInput = document.getElementById("photo");
@@ -13,6 +15,8 @@ const sendOtpButton = document.getElementById('sendOtpButton');
 const verifyOtpButton = document.getElementById('verifyOtpButton');
 const otpMessage = document.getElementById('otpMessage');
 const retryPlansButton = document.getElementById('retryPlansButton');
+const payNowButton = document.getElementById('payNowButton');
+const paymentStatus = document.getElementById('paymentStatus');
 let registrationToken = '';
 let verifiedUntil = 0;
 let resendAt = 0;
@@ -23,23 +27,57 @@ function updateControls() {
         registrationToken = '';
         otpMessage.textContent = 'Verification expired. Please request a new OTP.';
     }
+
     const remaining = Math.max(0, Math.ceil((resendAt - Date.now()) / 1000));
-    sendOtpButton.disabled = submitting || otpBusy || remaining > 0 || Boolean(registrationToken);
-    sendOtpButton.textContent = otpOperation === 'send' ? 'Sending WhatsApp OTP...'
-        : registrationToken ? 'WhatsApp Number Verified'
-        : remaining ? `Resend OTP (${remaining}s)` : 'Get WhatsApp OTP';
-    verifyOtpButton.disabled = submitting || otpBusy || Boolean(registrationToken);
-    verifyOtpButton.textContent = otpOperation === 'verify' ? 'Verifying...'
-        : registrationToken ? 'Verified' : 'Verify Number';
-    registerButton.disabled = submitting || !registrationToken || !planInput.value;
+
+    sendOtpButton.disabled =
+        submitting || otpBusy || remaining > 0 || Boolean(registrationToken);
+
+    sendOtpButton.textContent =
+        otpOperation === 'send'
+            ? 'Sending WhatsApp OTP...'
+            : registrationToken
+                ? 'WhatsApp Number Verified'
+                : remaining
+                    ? `Resend OTP (${remaining}s)`
+                    : 'Get WhatsApp OTP';
+
+    verifyOtpButton.disabled =
+        submitting || otpBusy || Boolean(registrationToken);
+
+    verifyOtpButton.textContent =
+        otpOperation === 'verify'
+            ? 'Verifying...'
+            : registrationToken
+                ? 'Verified'
+                : 'Verify Number';
+
+    registerButton.disabled =
+        submitting || !registrationToken || !planInput.value;
+
+    payNowButton.disabled =
+        submitting || !registrationToken || !planInput.value;
 }
+
+payNowButton.addEventListener('click', () => {
+    if (!registrationToken || !planInput.value) {
+        paymentStatus.textContent =
+            'Please verify your WhatsApp number and choose a membership plan first.';
+        return;
+    }
+
+    // A payment request must exist before payment.html can call NEXGO.
+    // Reuse the same validated registration flow as the Submit Registration button.
+    registerForm.requestSubmit();
+});
+
 async function post(fields) {
     const form = new FormData();
     for (const [key, value] of Object.entries(fields)) form.set(key, value);
     let response;
     try {
         response = await fetch(API_BASE_URL + '/api/member-app', {
-            method: 'POST', body: form, signal: AbortSignal.timeout(30000)
+            method: 'POST', headers: workspaceHeaders, body: form, signal: AbortSignal.timeout(30000)
         });
     } catch (error) {
         if (error.name === 'TimeoutError' || error.name === 'AbortError') {
@@ -136,7 +174,8 @@ async function loadPlans() {
 
     try {
         const response = await fetch(
-            API_BASE_URL + '/api/member-app?view=registration-options'
+            API_BASE_URL + '/api/member-app?view=registration-options',
+            { headers: workspaceHeaders }
         );
 
         const data = await response.json();
@@ -216,8 +255,13 @@ registerForm.addEventListener("submit", async event => {
     const receipt = document.getElementById('receipt').files[0];
     updateControls();
     if (!registrationToken) { message.textContent = 'Verify your WhatsApp number first.'; return; }
-    if (!planInput.value || !validPhoto(receipt)) {
-        message.textContent = 'Choose a membership plan and a valid payment receipt image.';
+    if (!planInput.value) {
+        message.textContent = "Choose a membership plan.";
+        return;
+    }
+
+    if (receipt && receipt.size > 0 && !validPhoto(receipt)) {
+        message.textContent = "Please choose a valid payment receipt image.";
         return;
     }
     if (!fullName || !phone || !validPhoto(photo)) {
@@ -232,19 +276,43 @@ registerForm.addEventListener("submit", async event => {
     form.set("fullName", fullName);
     form.set("phone", phone);
     form.set("photo", photo);
-    form.set('receipt', receipt);
+    if (receipt && receipt.size > 0) {
+        form.set("receipt", receipt);
+    }
     form.set('planId', planInput.value);
     form.set('registrationToken', registrationToken);
     try {
-        const response = await fetch(API_BASE_URL + "/api/member-app", { method: "POST", body: form });
+        const response = await fetch(API_BASE_URL + "/api/member-app", {
+            method: "POST",
+            headers: workspaceHeaders,
+            body: form
+        });
         const data = await response.json();
         if (!response.ok) {
             if (response.status === 401) registrationToken = '';
             throw new Error(data.error || "Registration failed.");
         }
-        if (!data.token) throw new Error("Registration response is incomplete. Please contact the gym before trying again.");
         sessionStorage.setItem("memberToken", data.token);
-        window.location.href = "dashboard.html";
+
+        if (!data.id || !data.token) {
+            throw new Error(
+                "Registration response is incomplete. Please contact the gym."
+            );
+        }
+
+        const paymentUrl = new URL("payment.html", window.location.href);
+        paymentUrl.searchParams.set("type", "registration");
+        paymentUrl.searchParams.set("requestId", data.id);
+
+        const selectedOption = planInput.options[planInput.selectedIndex];
+        const planPriceText = selectedOption.textContent.match(/RM\s?([\d,.]+)/);
+        const planPrice = planPriceText
+            ? parseFloat(planPriceText[1].replace(/,/g, ''))
+            : 0;
+        paymentUrl.searchParams.set("plan", selectedOption.textContent.split('—')[0].trim());
+        paymentUrl.searchParams.set("amount", (planPrice + registrationFeeCents / 100).toFixed(2));
+
+        window.location.href = paymentUrl.toString();
     } catch (error) { message.textContent = error.message; }
     finally { submitting = false; updateControls(); }
 });

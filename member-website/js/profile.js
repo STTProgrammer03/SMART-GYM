@@ -21,9 +21,10 @@ async function loadProfile() {
         const response = await fetch(
             `${API_BASE_URL}/api/member-app?view=me`,
             {
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+               headers: {
+    Authorization: `Bearer ${token}`,
+    "X-Workspace": sessionStorage.getItem("workspace") || ""
+}
             }
         );
 
@@ -88,7 +89,8 @@ if (data.photoKey) {
             {
                 method: "GET",
                 headers: {
-                    Authorization: `Bearer ${token}`
+                    Authorization: `Bearer ${token}`,
+                    "X-Workspace": sessionStorage.getItem("workspace") || ""
                 }
             }
         );

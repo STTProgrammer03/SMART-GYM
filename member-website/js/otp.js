@@ -6,6 +6,8 @@ const message = document.getElementById("message");
 const resendButton = document.getElementById("resendButton");
 
 const phone = sessionStorage.getItem("otpPhone");
+const workspace = sessionStorage.getItem("workspace");
+const workspaceHeaders = workspace ? { "X-Workspace": workspace } : {};
 
 if (!phone) {
     window.location.replace("index.html");
@@ -19,6 +21,7 @@ async function requestOtp() {
 
     const response = await fetch(`${API_BASE_URL}/api/member-app`, {
         method: "POST",
+        headers: workspaceHeaders,
         body: formData
     });
 
@@ -59,6 +62,7 @@ otpForm.addEventListener("submit", async (event) => {
             `${API_BASE_URL}/api/member-app`,
             {
                 method: "POST",
+                headers: workspaceHeaders,
                 body: verifyForm
             }
         );
@@ -80,6 +84,7 @@ otpForm.addEventListener("submit", async (event) => {
             `${API_BASE_URL}/api/member-app`,
             {
                 method: "POST",
+                headers: workspaceHeaders,
                 body: loginForm
             }
         );

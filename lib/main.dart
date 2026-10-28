@@ -393,24 +393,39 @@ class AccountForms extends StatefulWidget {
     required this.busy,
     required this.submit,
   });
+
   final MemberApi api;
   final List<Map<String, dynamic>> plans;
   final bool busy;
   final Future<void> Function(Future<void> Function()) submit;
+
   @override
   State<AccountForms> createState() => _AccountFormsState();
 }
 
 class _AccountFormsState extends State<AccountForms> {
-  final id = TextEditingController(),
-      loginPhone = TextEditingController(),
-      name = TextEditingController(),
-      phone = TextEditingController(),
-      email = TextEditingController();
-  bool registering = false, showPhone = false;
+  final id = TextEditingController();
+  final loginPhone = TextEditingController();
+
+  final name = TextEditingController();
+  final phone = TextEditingController();
+  final email = TextEditingController();
+
+  bool registering = false;
+
+  String? selectedGym;
   String? planId;
-  XFile? receipt, photo;
+
+  XFile? receipt;
+  XFile? photo;
+
   final picker = ImagePicker();
+
+  // Temporary gym list for the new UI.
+  // We will connect this to the real gym/workspace API in Stage 2.
+  final List<String> gyms = const [
+    'U FITNESS GYM',
+  ];
 
   @override
   void dispose() {
@@ -422,236 +437,564 @@ class _AccountFormsState extends State<AccountForms> {
     super.dispose();
   }
 
-  Future<XFile?> _chooseImage() =>
-      picker.pickImage(source: ImageSource.gallery, imageQuality: 85);
+  Future<XFile?> _chooseImage() {
+    return picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 85,
+    );
+  }
 
-  @override
-  Widget build(BuildContext context) => Center(
-    child: ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 480),
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(24, registering ? 36 : 90, 24, 48),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            const Center(child: BrandMark(size: 68)),
-            const SizedBox(height: 22),
-            Center(
-              child: Text(
-                tr(
-                  context,
-                  'K E A H L I A N   S A Y A',
-                  'M Y   M E M B E R S H I P',
-                ),
-                style: TextStyle(
-                  color: brand,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2,
-                ),
-              ),
-            ),
-            const SizedBox(height: 13),
-            Text(
-              registering
-                  ? tr(
-                      context,
-                      'Daftar ahli baharu',
-                      'Register as a new member',
-                    )
-                  : tr(context, 'Selamat kembali', 'Welcome back'),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                fontSize: 32,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1.1,
-              ),
-            ),
-            const SizedBox(height: 7),
-            Text(
-              registering
-                  ? tr(
-                      context,
-                      'Isi maklumat dan hantar bukti bayaran untuk semakan admin.',
-                      'Fill in your details and send payment proof for admin review.',
-                    )
-                  : tr(
-                      context,
-                      'Masuk dengan ID ahli dan nombor telefon berdaftar.',
-                      'Sign in with your member ID and registered phone number.',
-                    ),
-              textAlign: TextAlign.center,
-              style: const TextStyle(color: muted, fontSize: 15, height: 1.4),
-            ),
-            const SizedBox(height: 34),
-            if (!registering) ...[
-              TextField(
-                controller: id,
-                textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
-                  labelText: tr(
-                    context,
-                    'ID ahli atau ID permohonan',
-                    'Member or application ID',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 14),
-              TextField(
-                controller: loginPhone,
-                keyboardType: TextInputType.phone,
-                obscureText: !showPhone,
-                decoration: InputDecoration(
-                  labelText: tr(
-                    context,
-                    'Nombor telefon berdaftar',
-                    'Registered phone number',
-                  ),
-                  suffixIcon: IconButton(
-                    tooltip: showPhone
-                        ? tr(context, 'Sembunyikan nombor', 'Hide number')
-                        : tr(context, 'Lihat nombor', 'Show number'),
-                    onPressed: () => setState(() => showPhone = !showPhone),
-                    icon: Icon(
-                      showPhone
-                          ? Icons.visibility_off_outlined
-                          : Icons.visibility_outlined,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 22),
-              FilledButton(
-                onPressed: widget.busy
-                    ? null
-                    : () => widget.submit(
-                        () => widget.api.login(id.text, loginPhone.text),
-                      ),
-                child: Text(
-                  widget.busy
-                      ? tr(context, 'Sila tunggu...', 'Please wait...')
-                      : tr(context, 'Masuk', 'Sign in'),
-                ),
-              ),
-            ] else ...[
-              TextField(
-                controller: name,
-                decoration: InputDecoration(
-                  labelText: tr(context, 'Nama penuh', 'Full name'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: phone,
-                keyboardType: TextInputType.phone,
-                decoration: InputDecoration(
-                  labelText: tr(
-                    context,
-                    'Telefon dengan kod negara',
-                    'Phone with country code',
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: email,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(
-                  labelText: tr(context, 'E-mel (pilihan)', 'Email (optional)'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              PlanPicker(
-                plans: widget.plans,
-                value: planId,
-                onChanged: (value) => setState(() => planId = value),
-              ),
-              const SizedBox(height: 12),
-              OutlinedButton.icon(
-                onPressed: widget.busy
-                    ? null
-                    : () async {
-                        final chosen = await _chooseImage();
-                        if (chosen != null) setState(() => photo = chosen);
-                      },
-                icon: const Icon(Icons.face_outlined),
-                label: Text(
-                  photo?.name ??
-                      tr(context, 'Pilih gambar wajah', 'Choose face photo'),
-                ),
-              ),
-              const SizedBox(height: 8),
-              OutlinedButton.icon(
-                onPressed: widget.busy
-                    ? null
-                    : () async {
-                        final chosen = await _chooseImage();
-                        if (chosen != null) setState(() => receipt = chosen);
-                      },
-                icon: const Icon(Icons.receipt_long_outlined),
-                label: Text(
-                  receipt?.name ??
-                      tr(context, 'Pilih gambar resit', 'Choose receipt image'),
-                ),
-              ),
-              const SizedBox(height: 18),
-              FilledButton(
-                onPressed:
-                    widget.busy ||
-                        planId == null ||
-                        receipt == null ||
-                        photo == null
-                    ? null
-                    : () => widget.submit(() async {
-                        await widget.api.register(
-                          name: name.text,
-                          phone: phone.text,
-                          email: email.text,
-                          planId: planId!,
-                          receipt: receipt!,
-                          photo: photo!,
-                        );
-                      }),
-                child: Text(
-                  widget.busy
-                      ? tr(context, 'Sila tunggu...', 'Please wait...')
-                      : tr(context, 'Hantar permohonan', 'Submit application'),
-                ),
-              ),
-              const SizedBox(height: 12),
-              Text(
-                tr(
-                  context,
-                  'Akses pintu hanya aktif selepas admin meluluskan.',
-                  'Door access starts only after admin approval.',
-                ),
-                textAlign: TextAlign.center,
-                style: TextStyle(color: muted, fontSize: 13),
-              ),
-            ],
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: widget.busy
-                  ? null
-                  : () => setState(() => registering = !registering),
-              child: Text(
-                registering
-                    ? tr(
-                        context,
-                        'Sudah ada ID? Masuk',
-                        'Already have an ID? Sign in',
-                      )
-                    : tr(
-                        context,
-                        'Belum jadi ahli? Daftar',
-                        'New member? Register',
-                      ),
-                style: const TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ],
+  InputDecoration _inputDecoration({
+    required String hint,
+  }) {
+    return InputDecoration(
+      hintText: hint,
+      hintStyle: const TextStyle(
+        color: Color(0xFF888888),
+        fontSize: 14,
+      ),
+      filled: true,
+      fillColor: Colors.white,
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 14,
+      ),
+      border: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(7),
+        borderSide: const BorderSide(
+          color: Color(0xFFD0D0D0),
         ),
       ),
-    ),
-  );
+      enabledBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(7),
+        borderSide: const BorderSide(
+          color: Color(0xFFD0D0D0),
+        ),
+      ),
+      focusedBorder: OutlineInputBorder(
+        borderRadius: BorderRadius.circular(7),
+        borderSide: const BorderSide(
+          color: Color(0xFF222222),
+          width: 1.2,
+        ),
+      ),
+    );
+  }
+
+  Widget _blackButton({
+    required String text,
+    required VoidCallback? onPressed,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 47,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF222222),
+          foregroundColor: Colors.white,
+          disabledBackgroundColor: const Color(0xFF888888),
+          disabledForegroundColor: Colors.white,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(7),
+          ),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final background = const Color(0xFFF3F4F5);
+
+    if (registering) {
+      return _buildRegisterForm(context, background);
+    }
+
+    return Scaffold(
+      backgroundColor: background,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 16,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 380,
+                ),
+                child: Column(
+                  children: [
+                    const SizedBox(height: 2),
+
+                    // =====================================================
+                    // U FITNESS GYM HEADER
+                    // =====================================================
+                    const Text(
+                      'U FITNESS GYM',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.black,
+                        fontSize: 27,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: -0.5,
+                      ),
+                    ),
+
+                    const SizedBox(height: 2),
+
+                    const Text(
+                      'Member Portal',
+                      style: TextStyle(
+                        color: Color(0xFF777777),
+                        fontSize: 14,
+                      ),
+                    ),
+
+                    const SizedBox(height: 25),
+
+                    // =====================================================
+                    // LOGIN CARD
+                    // =====================================================
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.fromLTRB(
+                        35,
+                        33,
+                        35,
+                        34,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Color(0x18000000),
+                            blurRadius: 24,
+                            offset: Offset(0, 7),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // -------------------------------------------------
+                          // TITLE
+                          // -------------------------------------------------
+                          const Center(
+                            child: Text(
+                              'Member Login',
+                              style: TextStyle(
+                                color: Colors.black,
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: -0.6,
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 10),
+
+                          const Center(
+                            child: Text(
+                              'Enter your registered WhatsApp number to\n'
+                              'receive an OTP.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                color: Color(0xFF777777),
+                                fontSize: 14,
+                                height: 1.45,
+                              ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 32),
+
+                          // -------------------------------------------------
+                          // CHOOSE YOUR GYM
+                          // -------------------------------------------------
+                          const Text(
+                            'Choose Your Gym',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          DropdownButtonFormField<String>(
+                            value: selectedGym,
+                            decoration: _inputDecoration(
+                              hint: 'Select your gym',
+                            ),
+                            icon: const Icon(
+                              Icons.keyboard_arrow_down,
+                              color: Colors.black,
+                            ),
+                            items: gyms.map((gym) {
+                              return DropdownMenuItem<String>(
+                                value: gym,
+                                child: Text(
+                                  gym,
+                                  style: const TextStyle(
+                                    color: Colors.black,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                              );
+                            }).toList(),
+                            onChanged: widget.busy
+                                ? null
+                                : (value) {
+                                    setState(() {
+                                      selectedGym = value;
+                                    });
+                                  },
+                          ),
+
+                          const SizedBox(height: 19),
+
+                          // -------------------------------------------------
+                          // CONFIRM GYM
+                          // -------------------------------------------------
+                          _blackButton(
+                            text: 'Confirm Gym',
+                            onPressed: widget.busy ||
+                                    selectedGym == null
+                                ? null
+                                : () {
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      SnackBar(
+                                        content: Text(
+                                          '$selectedGym selected',
+                                        ),
+                                      ),
+                                    );
+                                  },
+                          ),
+
+                          const SizedBox(height: 1),
+
+                          // -------------------------------------------------
+                          // WHATSAPP NUMBER
+                          // -------------------------------------------------
+                          const Text(
+                            'WhatsApp Number',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+
+                          const SizedBox(height: 8),
+
+                          TextField(
+                            controller: loginPhone,
+                            keyboardType: TextInputType.phone,
+                            decoration: _inputDecoration(
+                              hint: 'e.g. 60123456789',
+                            ),
+                          ),
+
+                          const SizedBox(height: 20),
+
+                          // -------------------------------------------------
+                          // GET OTP
+                          // -------------------------------------------------
+                          _blackButton(
+                            text: widget.busy
+                                ? 'Please wait...'
+                                : 'Get WhatsApp OTP',
+                            onPressed: widget.busy
+                                ? null
+                                : () {
+                                    // OTP functionality will be connected
+                                    // in Stage 2.
+                                    ScaffoldMessenger.of(context)
+                                        .showSnackBar(
+                                      const SnackBar(
+                                        content: Text(
+                                          'WhatsApp OTP integration will be connected next.',
+                                        ),
+                                      ),
+                                    );
+                                  },
+                          ),
+
+                          const SizedBox(height: 14),
+
+                          // -------------------------------------------------
+                          // REGISTER
+                          // -------------------------------------------------
+                          const Text(
+                            'New member?',
+                            style: TextStyle(
+                              color: Colors.black,
+                              fontSize: 16,
+                            ),
+                          ),
+
+                          const SizedBox(height: 2),
+
+                          GestureDetector(
+                            onTap: widget.busy
+                                ? null
+                                : () {
+                                    setState(() {
+                                      registering = true;
+                                    });
+                                  },
+                            child: const Text(
+                              'Register Here',
+                              style: TextStyle(
+                                color: Colors.blue,
+                                fontSize: 16,
+                                decoration: TextDecoration.underline,
+                                decorationColor: Colors.blue,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 30),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRegisterForm(
+    BuildContext context,
+    Color background,
+  ) {
+    return Scaffold(
+      backgroundColor: background,
+      body: SafeArea(
+        child: SingleChildScrollView(
+          child: Center(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 20,
+                vertical: 30,
+              ),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  maxWidth: 480,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.all(30),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    boxShadow: const [
+                      BoxShadow(
+                        color: Color(0x18000000),
+                        blurRadius: 24,
+                        offset: Offset(0, 7),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'U FITNESS GYM',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 27,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                      const SizedBox(height: 3),
+
+                      const Text(
+                        'Member Portal',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFF777777),
+                          fontSize: 14,
+                        ),
+                      ),
+
+                      const SizedBox(height: 25),
+
+                      const Text(
+                        'New Member Registration',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Colors.black,
+                          fontSize: 25,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+
+                      const SizedBox(height: 25),
+
+                      TextField(
+                        controller: name,
+                        decoration: _inputDecoration(
+                          hint: 'Full name',
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      TextField(
+                        controller: phone,
+                        keyboardType: TextInputType.phone,
+                        decoration: _inputDecoration(
+                          hint: 'Phone with country code',
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      TextField(
+                        controller: email,
+                        keyboardType: TextInputType.emailAddress,
+                        decoration: _inputDecoration(
+                          hint: 'Email (optional)',
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      PlanPicker(
+                        plans: widget.plans,
+                        value: planId,
+                        onChanged: (value) {
+                          setState(() {
+                            planId = value;
+                          });
+                        },
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      OutlinedButton.icon(
+                        onPressed: widget.busy
+                            ? null
+                            : () async {
+                                final chosen = await _chooseImage();
+
+                                if (chosen != null) {
+                                  setState(() {
+                                    photo = chosen;
+                                  });
+                                }
+                              },
+                        icon: const Icon(Icons.face_outlined),
+                        label: Text(
+                          photo?.name ?? 'Choose face photo',
+                        ),
+                      ),
+
+                      const SizedBox(height: 8),
+
+                      OutlinedButton.icon(
+                        onPressed: widget.busy
+                            ? null
+                            : () async {
+                                final chosen = await _chooseImage();
+
+                                if (chosen != null) {
+                                  setState(() {
+                                    receipt = chosen;
+                                  });
+                                }
+                              },
+                        icon: const Icon(
+                          Icons.receipt_long_outlined,
+                        ),
+                        label: Text(
+                          receipt?.name ?? 'Choose receipt image',
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      _blackButton(
+                        text: widget.busy
+                            ? 'Please wait...'
+                            : 'Submit application',
+                        onPressed:
+                            widget.busy ||
+                                    planId == null ||
+                                    receipt == null ||
+                                    photo == null
+                                ? null
+                                : () => widget.submit(() async {
+                                    await widget.api.register(
+                                      name: name.text,
+                                      phone: phone.text,
+                                      email: email.text,
+                                      planId: planId!,
+                                      receipt: receipt!,
+                                      photo: photo!,
+                                    );
+                                  }),
+                      ),
+
+                      const SizedBox(height: 15),
+
+                      const Text(
+                        'Door access starts only after admin approval.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFF777777),
+                          fontSize: 13,
+                        ),
+                      ),
+
+                      const SizedBox(height: 18),
+
+                      TextButton(
+                        onPressed: widget.busy
+                            ? null
+                            : () {
+                                setState(() {
+                                  registering = false;
+                                });
+                              },
+                        child: const Text(
+                          'Already have an account? Member Login',
+                          style: TextStyle(
+                            color: Colors.blue,
+                            decoration:
+                                TextDecoration.underline,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

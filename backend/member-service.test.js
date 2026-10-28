@@ -31,7 +31,7 @@ test('phone-only login supports existing members and pending applications withou
   assert.equal(saved[2], 'pending');
 });
 
-test('registration requires phone-bound verification, a valid plan and receipt; proof is single use', async t => {
+test('registration requires phone-bound verification; receipt is optional and proof is single use', async t => {
   const directory = await mkdtemp(join(tmpdir(), 'member-registration-'));
   t.after(() => rm(directory, { recursive: true, force: true }));
   let code, request;
@@ -60,9 +60,6 @@ test('registration requires phone-bound verification, a valid plan and receipt; 
   form.set('planId', 'unavailable');
   await assert.rejects(service.post(form, null, 'test'), e => e.status === 400);
   form.set('planId', 'plan-a');
-  await assert.rejects(service.post(form, null, 'test'), e => e.status === 400);
-  assert.deepEqual(await readdir(directory), []);
-  form.set('receipt', photo, 'receipt.jpg');
   const results = await Promise.allSettled([1, 2].map(() => service.post(form, null, 'test')));
   assert.equal(results.filter(r => r.status === 'fulfilled').length, 1);
   const result = results.find(r => r.status === 'fulfilled').value;
@@ -70,9 +67,89 @@ test('registration requires phone-bound verification, a valid plan and receipt; 
   assert.match(result.token, /^web_/);
   assert.equal(request.phone, '60167619166');
   assert.equal(request.planId, 'plan-a');
-  assert.match(request.receiptKey, /^web\//);
-  assert.equal((await readdir(directory)).length, 1);
+  assert.equal(request.receiptKey, null);
+  assert.deepEqual(await readdir(directory), []);
   await assert.rejects(service.post(form, null, 'test'), e => e.status === 401);
+});
+
+test('pay-membership serializes concurrent payment attempts and blocks UNKNOWN retries', async () => {
+  const requestId = 'request-1';
+  const payment = {
+    invoiceNo: 'N-first',
+    requestId,
+    amountCents: 6600,
+    paymentStatus: 'PENDING'
+  };
+  let existingPayment = null;
+  let reserveCalls = 0;
+  let transactionCalls = 0;
+  let terminalCalls = 0;
+  let releaseTerminal;
+  let markTerminalStarted;
+  const terminalStarted = new Promise(resolve => { markTerminalStarted = resolve; });
+  const terminalRelease = new Promise(resolve => { releaseTerminal = resolve; });
+
+  const repo = {
+    session: async () => ({ staffId: null, requestId }),
+    application: async () => ({ id: requestId, status: 'PENDING' }),
+    paymentRequest: async id => id === requestId
+      ? { id: requestId, kind: 'REGISTER', staffId: null, workspaceId: 'gym', amountCents: 6600 }
+      : null,
+    paymentTransactionByRequest: async () => existingPayment,
+    reservePaymentRequest: async () => {
+      reserveCalls++;
+      return reserveCalls === 1;
+    },
+    createPaymentTransaction: async () => {
+      transactionCalls++;
+      existingPayment = { ...payment };
+      return payment;
+    },
+    updatePaymentTransaction: async ({ paymentStatus }) => {
+      existingPayment = { ...existingPayment, paymentStatus };
+    }
+  };
+
+  const service = new MemberService(repo, 'unused', {
+    sendSaleToTerminal: async () => {
+      terminalCalls++;
+      markTerminalStarted();
+      await terminalRelease;
+      return {
+        paymentConfirmed: false,
+        parsed: { statusCode: 'EA', pending: true }
+      };
+    }
+  });
+
+  const paymentForm = formFor('pay-membership', { requestId });
+  const first = service.post(paymentForm, 'web_' + 'a'.repeat(64), 'test');
+
+  await terminalStarted;
+  const second = await service.post(
+    formFor('pay-membership', { requestId }),
+    'web_' + 'a'.repeat(64),
+    'test'
+  );
+
+  assert.equal(second.paymentStatus, 'PENDING');
+  assert.equal(terminalCalls, 1);
+  assert.equal(transactionCalls, 1);
+
+  releaseTerminal();
+  const firstResult = await first;
+  assert.equal(firstResult.paymentStatus, 'UNKNOWN');
+  assert.equal(terminalCalls, 1);
+
+  const third = await service.post(
+    formFor('pay-membership', { requestId }),
+    'web_' + 'a'.repeat(64),
+    'test'
+  );
+
+  assert.equal(third.paymentStatus, 'UNKNOWN');
+  assert.equal(terminalCalls, 1);
+  assert.equal(transactionCalls, 1);
 });
 
 test('existing accounts cannot request registration OTP', async () => {

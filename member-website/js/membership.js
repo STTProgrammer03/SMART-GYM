@@ -26,8 +26,9 @@ async function loadMembership() {
             {
                 method: "GET",
                 headers: {
-                    "Authorization": `Bearer ${token}`
-                }
+    "Authorization": `Bearer ${token}`,
+    "X-Workspace": sessionStorage.getItem("workspace") || ""
+}
             }
         );
 
@@ -37,6 +38,33 @@ async function loadMembership() {
             throw new Error(
                 data.error || "Failed to load membership."
             );
+        }
+
+        // Fill the welcome section with the authenticated member's data.
+        const memberName = document.getElementById("memberNameHeading");
+        const memberPhoto = document.getElementById("memberPhoto");
+        const workspace = sessionStorage.getItem("workspace") || "";
+        const authHeaders = {
+            Authorization: `Bearer ${token}`,
+            ...(workspace ? { "X-Workspace": workspace } : {})
+        };
+
+        memberName.textContent = data.name || "Member";
+        memberPhoto.alt = `${data.name || "Member"} profile photo`;
+
+        if (data.photoKey) {
+            try {
+                const photoResponse = await fetch(
+                    `${API_BASE_URL}/api/member-app?view=photo`,
+                    { headers: authHeaders }
+                );
+                if (!photoResponse.ok) throw new Error("Photo unavailable");
+                const photoUrl = URL.createObjectURL(await photoResponse.blob());
+                memberPhoto.onload = () => URL.revokeObjectURL(photoUrl);
+                memberPhoto.src = photoUrl;
+            } catch (photoError) {
+                console.warn("Unable to load member photo:", photoError);
+            }
         }
 
         const membership = data.membership;
@@ -69,6 +97,8 @@ const today = new Date();
 
 today.setHours(0, 0, 0, 0);
 
+let renewalWarning = "";
+
 if (membership.validEnd) {
 
     const endDate =
@@ -86,22 +116,67 @@ if (membership.validEnd) {
 
     if (days > 0) {
 
-        remainingText =
-            `${days} day${days === 1 ? "" : "s"} remaining`;
+    remainingText =
+        `${days} day${days === 1 ? "" : "s"} remaining`;
 
-    } else if (days === 0) {
+} else if (days === 0) {
 
-        remainingText =
-            "Expires today";
+    remainingText =
+        "Expires today";
+
+} else {
+
+    remainingText =
+        "Expired";
+}
+
+
+// ==========================================
+// RENEWAL WARNING
+// ==========================================
+
+
+if (days >= 0 && days <= 3) {
+
+    if (days === 0) {
+
+        renewalWarning = `
+            <div class="membership-renewal-warning">
+                <strong>🔴 Membership Expires Today</strong>
+                <p>Your membership expires today. Renew now to continue.</p>
+                <button
+                    type="button"
+                    onclick="startRenewal()"
+                >
+                    Renew Membership
+                </button>
+            </div>
+        `;
 
     } else {
 
-        remainingText =
-            "Expired";
+        renewalWarning = `
+            <div class="membership-renewal-warning">
+                <strong>🟠 Membership Expiring Soon</strong>
+                <p>
+                    Your membership expires in
+                    <strong>${days} day${days === 1 ? "" : "s"}</strong>.
+                </p>
+
+                <button
+                    type="button"
+                    onclick="startRenewal()"
+                >
+                    Renew Membership
+                </button>
+            </div>
+        `;
+
     }
 }
+}
 
-        // ==========================================
+// ==========================================
 // MEMBERSHIP STATUS
 // ==========================================
 
@@ -232,6 +307,8 @@ currentMembership.innerHTML = `
     </button>
 </div>
 
+            ${renewalWarning}
+
 
         <div class="membership-progress-section">
 
@@ -290,7 +367,8 @@ async function loadPlans() {
             {
                 method: "GET",
                 headers: {
-                    "Authorization": `Bearer ${token}`
+                    "Authorization": `Bearer ${token}`,
+                    "X-Workspace": sessionStorage.getItem("workspace") || ""
                 }
             }
         );
@@ -308,6 +386,14 @@ const plans = data.plans || [];
 sessionStorage.setItem(
     "membershipPlans",
     JSON.stringify(plans)
+);
+
+console.table(
+    plans.map(p => ({
+        id: p.id,
+        name: p.name,
+        priceCents: p.priceCents
+    }))
 );
 
 const renewalMode =
@@ -443,29 +529,54 @@ function choosePlan(planId) {
             <h3>Confirm Your Renewal</h3>
 
             <p>
-                You selected:
+                Membership Plan:
                 <strong>${selectedPlan.name}</strong>
             </p>
 
             <p>
-                Membership Price:
+                Renewal Price:
                 <strong>RM ${price}</strong>
             </p>
 
             <p>
-                Your renewal request will be sent to the admin
-                for approval.
+                Please review your membership plan before continuing to payment.
             </p>
 
             <button
                 type="button"
-                onclick="submitRenewalRequest()"
+                onclick="continueRenewalPayment()"
             >
-                Submit Renewal Request
+                Pay Now
             </button>
 
         </div>
     `;
+}
+
+async function continueRenewalPayment() {
+
+    const selectedPlanId =
+        sessionStorage.getItem("selectedMembershipPlan");
+
+    if (!selectedPlanId) {
+        alert("Please select a membership plan first.");
+        return;
+    }
+
+    const plans =
+        JSON.parse(
+            sessionStorage.getItem("membershipPlans") || "[]"
+        );
+
+    const selectedPlan =
+        plans.find(plan => plan.id === selectedPlanId);
+
+    if (!selectedPlan) {
+        alert("Unable to find the selected membership plan.");
+        return;
+    }
+
+    await submitRenewalRequest();
 }
 
 function startRenewal() {
@@ -491,7 +602,6 @@ loadMembership();
 loadPlans();
 
 async function submitRenewalRequest() {
-
     const selectedPlan =
         sessionStorage.getItem("selectedMembershipPlan");
 
@@ -500,29 +610,36 @@ async function submitRenewalRequest() {
         return;
     }
 
-    const receiptInput = document.getElementById("renewalReceipt");
-    const receipt = receiptInput?.files[0];
-    if (!receipt || !["image/jpeg", "image/png", "image/webp"].includes(receipt.type)
-        || receipt.size === 0 || receipt.size > 5 * 1024 * 1024) {
-        document.getElementById("renewalMessage").textContent =
-            "Choose a JPEG, PNG or WebP payment receipt smaller than 5 MB.";
+    const plans = JSON.parse(
+        sessionStorage.getItem("membershipPlans") || "[]"
+    );
+
+    const planDetails = plans.find(
+        plan => plan.id === selectedPlan
+    );
+
+    if (!planDetails) {
+        alert("Unable to find the selected membership plan.");
         return;
     }
 
-    try {
+    const renewalMessage =
+        document.getElementById("renewalMessage");
 
+    try {
         const formData = new FormData();
 
         formData.append("action", "renew");
         formData.append("planId", selectedPlan);
-        formData.append("receipt", receipt);
 
         const response = await fetch(
             `${API_BASE_URL}/api/member-app`,
             {
                 method: "POST",
                 headers: {
-                    "Authorization": `Bearer ${token}`
+                    "Authorization": `Bearer ${token}`,
+                    "X-Workspace":
+                        sessionStorage.getItem("workspace") || ""
                 },
                 body: formData
             }
@@ -532,26 +649,46 @@ async function submitRenewalRequest() {
 
         if (!response.ok) {
             throw new Error(
-                data.error || "Unable to submit renewal request."
+                data.error || "Unable to create renewal request."
             );
         }
 
-        alert(
-            "Renewal request submitted successfully. Please wait for admin approval."
-        );
+        if (!data.id) {
+            throw new Error(
+                "Renewal request was created but no request ID was returned."
+            );
+        }
 
         sessionStorage.removeItem("selectedMembershipPlan");
         sessionStorage.removeItem("renewalMode");
 
-        window.location.reload();
+        const paymentUrl = new URL(
+            "payment.html",
+            window.location.href
+        );
 
+        paymentUrl.searchParams.set("type", "renewal");
+        paymentUrl.searchParams.set("requestId", data.id);
+        paymentUrl.searchParams.set(
+            "plan",
+            planDetails.name
+        );
+        paymentUrl.searchParams.set(
+            "amount",
+            (Number(planDetails.priceCents || 0) / 100).toFixed(2)
+        );
+
+        window.location.href = paymentUrl.toString();
     } catch (error) {
-
         console.error(error);
 
-        alert(
-            error.message ||
-            "Unable to submit renewal request."
-        );
+        if (renewalMessage) {
+            renewalMessage.textContent =
+                error.message || "Unable to create renewal request.";
+        } else {
+            alert(
+                error.message || "Unable to create renewal request."
+            );
+        }
     }
 }

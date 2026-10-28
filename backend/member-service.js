@@ -52,14 +52,19 @@ export function attendanceDays(events, now = new Date()) {
 }
 
 export class MemberService {
-  constructor(repository, uploadDirectory, { sendOtp } = {}) {
-  this.repo = repository;
-  this.uploadDirectory = uploadDirectory;
-  this.attempts = new Map();
-  this.otpStore = new Map();
-  this.registrationTokens = new Map();
-  this.sendOtp = sendOtp;
-}
+  constructor(
+    repository,
+    uploadDirectory,
+    { sendOtp, sendSaleToTerminal } = {}
+  ) {
+    this.repo = repository;
+    this.uploadDirectory = uploadDirectory;
+    this.attempts = new Map();
+    this.otpStore = new Map();
+    this.registrationTokens = new Map();
+    this.sendOtp = sendOtp;
+    this.sendSaleToTerminal = sendSaleToTerminal;
+  }
 
   limit(key, maximum, interval) {
     const now = Date.now();
@@ -87,6 +92,17 @@ export class MemberService {
   }
 
   async get(view, token) {
+
+    if (view === 'workspaces') {
+        return { workspaces: await this.repo.workspaces() };
+    }
+    if (view === 'workspace-for-phone') {
+      const raw = phoneDigits(new URLSearchParams(token ?? '').get('phone'));
+      const normalized = /^01\d{8,9}$/.test(raw) ? `6${raw}` : raw;
+      if (!/^\d{7,15}$/.test(normalized)) throw new ApiError(400, 'Enter a valid phone number.');
+      return { workspaces: await this.repo.workspacesByPhone(normalized) };
+    }
+
     if (view === 'plans') return { plans: await this.repo.plans() };
    if (view === 'registration-options') return {
   plans: await this.repo.plans(),
@@ -296,7 +312,27 @@ if (action === 'verify-otp') {
       const identity = action === 'renew' ? await this.identity(token) : null;
       if (identity && !identity.staff) throw new ApiError(403, 'Registration must be approved before renewal.');
       const planId = text(form, 'planId', 128);
+      console.log('[Renewal debug] Workspace:', this.repo.workspace);
+      console.log('[Renewal debug] Submitted planId:', planId);
       if (!(await this.repo.plans()).some((p) => p.id === planId)) throw new ApiError(400, 'Please select an available plan.');
+      if (action === 'renew') {
+        const existingRenewal = await this.repo.pendingRenewal(identity.staffId);
+        if (existingRenewal) {
+          if (existingRenewal.planId !== planId) {
+            throw new ApiError(
+              409,
+              `A pending renewal already exists for ${existingRenewal.planName}. Resolve or cancel it before choosing another plan.`
+            );
+          }
+          return {
+            id: existingRenewal.id,
+            status: existingRenewal.status,
+            reused: true,
+            planId: existingRenewal.planId,
+            amountCents: existingRenewal.priceCents
+          };
+        }
+      }
       const data = { id: randomUUID(), kind: action === 'register' ? 'REGISTER' : 'RENEW',
         staffId: identity?.staffId ?? null, planId,
         name: identity?.staff.name ?? text(form, 'fullName', 256),
@@ -315,8 +351,16 @@ if (action === 'verify-otp') {
       try {
         const photo = action === 'register' ? await this.preparePhoto(form.get('photo')) : null;
         data.photoKey = photo?.storageKey ?? null;
-        data.receiptKey = await this.saveImage(form.get('receipt'));
-        images.push(data.receiptKey);
+        const receipt = form.get('receipt');
+        data.paymentMethod =
+          receipt instanceof File && receipt.size > 0
+            ? 'MANUAL_RECEIPT'
+            : 'NEXGO_N86';
+        data.receiptKey =
+          receipt instanceof File && receipt.size > 0
+            ? await this.saveImage(receipt)
+            : null;
+        if (data.receiptKey) images.push(data.receiptKey);
         const sessionToken = action === 'register' ? `web_${randomBytes(32).toString('hex')}` : null;
         await this.repo.transaction(async (repo) => {
           if (photo) await repo.savePhoto(photo);
@@ -325,6 +369,7 @@ if (action === 'verify-otp') {
         });
         return { id: data.id, ...(sessionToken ? { token: sessionToken } : {}), status: 'PENDING' };
       } catch (error) {
+        console.error('[Renewal SQL error]', error);
         await this.removeImages(images);
         if (verification && verification.expiresAt > Date.now()) this.registrationTokens.set(verificationKey, verification);
         if (error.number === 50003 || error.originalError?.info?.number === 50003) {
@@ -364,6 +409,224 @@ if (action === 'verify-otp') {
       });
       return { ok: true, photoKey };
     }
+    if (action === 'pay-membership') {
+      const requestId = text(form, 'requestId', 128);
+
+      if (!this.sendSaleToTerminal) {
+        throw new ApiError(503, 'NEXGO payment is not configured.');
+      }
+
+      if (!token) {
+        throw new ApiError(401, 'Please sign in or verify your registration first.');
+      }
+
+      const identity = await this.identity(token);
+      const paymentRequest = await this.repo.paymentRequest(requestId);
+
+      if (!paymentRequest) {
+        throw new ApiError(404, 'Pending membership request not found.');
+      }
+
+      const ownsRequest = paymentRequest.kind === 'REGISTER'
+        ? identity.requestId === paymentRequest.id
+        : Boolean(
+            identity.staffId &&
+            paymentRequest.staffId === identity.staffId
+          );
+
+      if (!ownsRequest) {
+        throw new ApiError(403, 'You cannot pay for this membership request.');
+      }
+
+      const existingPayment =
+        await this.repo.paymentTransactionByRequest(requestId);
+
+      if (existingPayment) {
+        const status = existingPayment.paymentStatus;
+
+        if (status === 'PAID') {
+          return {
+            success: true,
+            invoice: existingPayment.invoiceNo,
+            requestId,
+            amountCents: existingPayment.amountCents,
+            paymentStatus: 'PAID',
+            message:
+              'This membership request already has a recorded payment. No new charge was started.'
+          };
+        }
+
+        if (status === 'PENDING' || status === 'UNKNOWN') {
+          return {
+            success: false,
+            invoice: existingPayment.invoiceNo,
+            requestId,
+            amountCents: existingPayment.amountCents,
+            paymentStatus: status,
+            message:
+              'A previous payment attempt may still be processing. Check the terminal and reconcile the existing transaction before trying again.'
+          };
+        }
+
+        if (status === 'FAILED') {
+          return {
+            success: false,
+            invoice: existingPayment.invoiceNo,
+            requestId,
+            amountCents: existingPayment.amountCents,
+            paymentStatus: 'FAILED',
+            message:
+              'A previous payment attempt failed. Verify its final status before authorizing another attempt.'
+          };
+        }
+      }
+
+      const invoiceNo =
+        `N${randomUUID().replaceAll('-', '')}`;
+
+      const terminalInvoiceNo =
+        `T${randomBytes(5).toString('hex').toUpperCase()}`;
+
+      let created;
+
+      try {
+        // Creating the PENDING transaction is the reservation.
+        // The database's unique index prevents duplicate pending rows.
+        created = await this.repo.createPaymentTransaction({
+          invoiceNo,
+          terminalInvoiceNo,
+          requestId,
+          workspaceId: paymentRequest.workspaceId
+        });
+      } catch (error) {
+        // Another request may have created the payment first.
+        const errorNumber =
+          error.number ?? error.originalError?.info?.number;
+
+        if (errorNumber === 2601 || errorNumber === 2627) {
+          const existing =
+            await this.repo.paymentTransactionByRequest(requestId);
+
+          if (existing) {
+            return {
+              success: false,
+              invoice: existing.invoiceNo,
+              requestId,
+              amountCents: existing.amountCents,
+              paymentStatus: existing.paymentStatus,
+              message:
+                'A payment transaction already exists. Check its status before trying again.'
+            };
+          }
+        }
+
+        throw error;
+      }
+
+      const payment =
+        Array.isArray(created) ? created[0] : created;
+
+      if (
+        !payment ||
+        !Number.isInteger(payment.amountCents)
+      ) {
+        throw new ApiError(
+          500,
+          'Unable to prepare the payment transaction.'
+        );
+      }
+
+      try {
+        const terminal = await this.sendSaleToTerminal(
+          payment.amountCents,
+          terminalInvoiceNo
+        );
+
+        const status = terminal.paymentConfirmed === true
+          ? 'PAID'
+          : 'UNKNOWN';
+
+        const updatedPayment = await this.repo.updatePaymentTransaction({
+          invoiceNo,
+          paymentStatus: status,
+          terminalResponse: terminal.parsed
+        });
+
+        if (!updatedPayment) {
+          console.error(
+            '[NEXGO PAYMENT] Terminal result could not be saved.',
+            {
+              invoiceNo,
+              terminalInvoiceNo,
+              paymentConfirmed: terminal.paymentConfirmed === true
+            }
+          );
+
+          return {
+            success: false,
+            invoice: invoiceNo,
+            requestId,
+            amountCents: payment.amountCents,
+            paymentStatus: 'UNKNOWN',
+            message:
+              'Terminal result could not be saved. Do not retry payment; reconcile the transaction first.'
+          };
+        }
+
+        if (status === 'PAID' && paymentRequest.kind === 'RENEW') {
+          try {
+            await this.repo.activatePaidRenewal(requestId);
+          } catch (error) {
+            console.error('[NEXGO PAYMENT] Renewal activation failed after PAID.', {
+              invoiceNo,
+              terminalInvoiceNo,
+              errorMessage: String(error.message ?? 'Unknown error').slice(0, 300)
+            });
+
+            return {
+              success: false,
+              invoice: invoiceNo,
+              requestId,
+              amountCents: payment.amountCents,
+              paymentStatus: 'PAID',
+              message: 'Payment was approved, but membership activation needs reconciliation. Do not retry payment.'
+            };
+          }
+        }
+
+        return {
+          success: status === 'PAID',
+          invoice: invoiceNo,
+          requestId,
+          amountCents: payment.amountCents,
+          paymentStatus: status,
+          message: status === 'PAID'
+            ? 'Payment approved. Membership remains pending admin approval.'
+            : status === 'UNKNOWN'
+              ? 'Payment status is uncertain. Check the terminal before retrying.'
+              : 'Payment was not confirmed. Check the terminal result.'
+        };
+      } catch (error) {
+        await this.repo.updatePaymentTransaction({
+          invoiceNo,
+          paymentStatus: 'UNKNOWN',
+          terminalResponse: {
+            message: 'Terminal outcome could not be confirmed.',
+            errorCode: error.code ?? null,
+            errorMessage: String(error.message ?? 'Unknown error').slice(0, 300)
+          }
+        }).catch(() => {});
+
+        return {
+          success: false,
+          invoice: invoiceNo,
+          requestId,
+          paymentStatus: 'UNKNOWN',
+          message: 'Payment status is uncertain. Check the terminal before retrying.'
+        };
+      }
+    }
+
     throw new ApiError(400, 'Unsupported action.');
   }
 }

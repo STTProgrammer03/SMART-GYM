@@ -55,7 +55,7 @@ export function serverConfig(env) {
   return {
     workspace: env.MEMBER_WORKSPACE_ID?.trim() || 'legacy-workspace',
     port: port(env.PORT, 'PORT', 3000),
-    origins: (env.WEBSITE_ORIGINS || 'http://localhost:8080,http://127.0.0.1:8080')
+   origins: (env.WEBSITE_ORIGINS || 'http://localhost:8080,http://127.0.0.1:8080,http://localhost:52490,http://192.168.2.165:52490')
       .split(',').map((value) => value.trim()).filter(Boolean),
   };
 }

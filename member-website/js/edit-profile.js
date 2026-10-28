@@ -1,6 +1,14 @@
 const API_BASE_URL = "http://localhost:3000";
 
 const token = sessionStorage.getItem("memberToken");
+const workspace = sessionStorage.getItem("workspace") || "";
+
+function authHeaders() {
+    return {
+        Authorization: `Bearer ${token}`,
+        ...(workspace ? { "X-Workspace": workspace } : {})
+    };
+}
 
 
 // Check login
@@ -22,9 +30,7 @@ async function loadProfile() {
             `${API_BASE_URL}/api/member-app?view=me`,
             {
                 method: "GET",
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+                headers: authHeaders()
             }
         );
 
@@ -144,10 +150,7 @@ if (photoInput.files.length > 0) {
                 {
                     method: "POST",
 
-                    headers: {
-                        Authorization:
-                            `Bearer ${token}`
-                    },
+                    headers: authHeaders(),
 
                     body: formData
                 }
@@ -159,6 +162,12 @@ if (photoInput.files.length > 0) {
 
 
             if (!response.ok) {
+
+                if (response.status === 401) {
+                    sessionStorage.removeItem("memberToken");
+                    window.location.replace("index.html");
+                    return;
+                }
 
                 throw new Error(
                     data.error ||
@@ -203,9 +212,7 @@ async function loadProfile() {
             `${API_BASE_URL}/api/member-app?view=me`,
             {
                 method: "GET",
-                headers: {
-                    Authorization: `Bearer ${token}`
-                }
+                headers: authHeaders()
             }
         );
 

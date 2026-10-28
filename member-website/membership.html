@@ -25,16 +25,39 @@
 </div>
 
 
-        <!-- PAGE TITLE -->
-        <div class="dashboard-card">
+        
+<!-- PAGE TITLE / MEMBER WELCOME -->
+<!-- MEMBERSHIP HEADER -->
+<div class="dashboard-card membership-welcome">
+    <div class="membership-welcome-content">
 
-            <h1>My Membership</h1>
+        <div class="membership-welcome-text">
+            <h1>
+                <span id="memberNameHeading">My</span>'s Membership
+            </h1>
 
-            <p class="membership-subtitle">
-                View your membership and choose a plan.
+            <p class="membership-description">
+                Manage your membership and personal details.
             </p>
-
         </div>
+
+        <div class="membership-profile">
+            <img
+                id="memberPhoto"
+                class="membership-profile-photo"
+                src="assets/logo.png"
+                alt="Member profile photo"
+            >
+
+            <a href="edit-profile.html" class="edit-profile-link">
+                <span aria-hidden="true">⚙</span>
+                Edit Profile
+            </a>
+        </div>
+
+    </div>
+</div>
+
 
 
         <!-- CURRENT MEMBERSHIP -->
@@ -45,20 +68,6 @@
             <div id="currentMembership">
 
     <p>Loading membership...</p>
-
-</div>
-
-<div id="renewalSection" style="display: none; margin-top: 20px;">
-
-    <h3>Renew Membership</h3>
-
-    <p>Select a membership plan to continue your renewal request.</p>
-
-    <label for="renewalReceipt">Payment receipt</label>
-    <input id="renewalReceipt" type="file" accept="image/jpeg,image/png,image/webp" required>
-    <p id="renewalMessage" role="status"></p>
-
-    <div id="renewalPlans"></div>
 
 </div>
 
@@ -77,6 +86,22 @@
             </div>
 
         </div>
+
+        <!-- RENEW MEMBERSHIP -->
+<div
+    class="dashboard-section"
+    id="renewalSection"
+    style="display: none;"
+>
+
+    <h2>Renew Membership</h2>
+
+<p>
+    Choose a new membership plan to continue your membership.
+</p>
+    <div id="renewalPlans"></div>
+
+</div>
 
         <button
     class="back-button"

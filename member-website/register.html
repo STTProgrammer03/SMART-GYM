@@ -26,9 +26,16 @@
                 <select id="planId" required disabled><option value="">Loading plans...</option></select>
                 <p id="paymentInstructions" class="registration-payment"></p>
                 <div id="registrationTotal" class="registration-payment"></div>
-                <button type="button" id="retryPlansButton" hidden>Reload Plans</button>
+
+<button type="button" id="payNowButton" disabled>
+    Pay Now
+</button>
+
+<p id="paymentStatus" class="registration-payment"></p>
+
+<button type="button" id="retryPlansButton" hidden>Reload Plans</button>
                 <label for="receipt">Payment Receipt</label>
-                <input type="file" id="receipt" accept="image/jpeg,image/png,image/webp" required>
+                <input type="file" id="receipt" accept="image/jpeg,image/png,image/webp">
                 <p class="photo-help">Upload your payment receipt as JPEG, PNG or WebP, maximum 5 MB.</p>
                 <label for="photo">Profile Photo</label>
                 <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" required>
@@ -40,6 +47,6 @@
             <div class="register-section"><p>Already a member?</p><a href="index.html">Back to Login</a></div>
         </div>
     </div>
-    <script src="js/register.js?v=otp-feedback-2"></script>
+    <script src="js/register.js?v=payment-flow-4"></script>
 </body>
 </html>
