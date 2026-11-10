@@ -12,23 +12,34 @@ function formFor(action, fields = {}) {
   return form;
 }
 
-test('phone-only login supports existing members and pending applications without sending OTP', async () => {
+test('OTP login requires and consumes the phone-bound verification token', async () => {
+  let code;
   let saved;
+  const member = { id: 'member', phone: '60167619166' };
   const repo = {
-    staffByPhone: async number => { assert.equal(number, '60167619166'); return { id: 'member' }; },
-    applicationByPhone: async () => null,
+    staffByPhone: async number => number === member.phone ? member : null,
     createSession: async (...args) => { saved = args; },
   };
-  const service = new MemberService(repo, 'unused', { sendOtp: async () => assert.fail('No OTP for login') });
-  const form = formFor('login', { phone: '0167619166' });
-  assert.match((await service.post(form, null, 'test')).token, /^web_/);
-  assert.equal(saved[1], 'member');
-  repo.staffByPhone = async () => null;
-  await assert.rejects(service.post(form, null, 'test'), e => e.status === 401);
-  repo.applicationByPhone = async () => ({ id: 'pending' });
-  await service.post(form, null, 'test');
-  assert.equal(saved[1], null);
-  assert.equal(saved[2], 'pending');
+  const service = new MemberService(repo, 'unused', {
+    sendOtp: async (_number, otp) => { code = otp; },
+  });
+  const login = formFor('login', { phone: '0167619166' });
+  await assert.rejects(service.post(login, null, 'test'), error => error.status === 401);
+
+  await service.post(formFor('request-otp', {
+    purpose: 'login',
+    phone: '0167619166',
+  }), null, 'test');
+  const verification = await service.post(formFor('verify-otp', {
+    phone: '60167619166',
+    otp: code,
+  }), null, 'test');
+  login.set('registrationToken', verification.registrationToken);
+  const result = await service.post(login, null, 'test');
+  assert.match(result.token, /^web_[a-f0-9]{64}$/);
+  assert.equal(saved[1], member.id);
+  assert.equal(saved[2], null);
+  await assert.rejects(service.post(login, null, 'test'), error => error.status === 401);
 });
 
 test('registration requires phone-bound verification; receipt is optional and proof is single use', async t => {
@@ -265,4 +276,3 @@ test('existing company photos are read from media_files using only the session m
   repo.mediaPhoto = async () => ({ bytes: Buffer.from('<svg></svg>'), contentType: 'image/jpeg' });
   await assert.rejects(service.get('photo', 'web_' + 'a'.repeat(64)), e => e.status === 404);
 });
-

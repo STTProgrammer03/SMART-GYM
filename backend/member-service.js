@@ -55,7 +55,7 @@ export class MemberService {
   constructor(
     repository,
     uploadDirectory,
-    { sendOtp, sendSaleToTerminal } = {}
+    { sendOtp, sendSaleToTerminal, hitPayClient, otpEnabled = true } = {}
   ) {
     this.repo = repository;
     this.uploadDirectory = uploadDirectory;
@@ -64,6 +64,8 @@ export class MemberService {
     this.registrationTokens = new Map();
     this.sendOtp = sendOtp;
     this.sendSaleToTerminal = sendSaleToTerminal;
+    this.hitPayClient = hitPayClient;
+    this.otpEnabled = otpEnabled;
   }
 
   limit(key, maximum, interval) {
@@ -76,7 +78,8 @@ export class MemberService {
 
   async identity(token) {
     if (!/^web_[a-f0-9]{64}$/.test(token ?? '')) throw new ApiError(401, 'Please sign in again.');
-    const session = await this.repo.session(hash(token));
+    const tokenHash = hash(token);
+    const session = await this.repo.session(tokenHash);
     if (!session) throw new ApiError(401, 'Please sign in again.');
     let staffId = session.staffId;
     let application;
@@ -130,6 +133,9 @@ export class MemberService {
     }
     if (view === 'settings') return this.repo.settings();
     if (view === 'attendance') return { days: staff ? attendanceDays(await this.repo.events(staffId)) : [] };
+    if (view === 'payments') {
+      return { payments: await this.repo.paymentTransactionsForMember(staffId, requestId) };
+    }
     if (view === 'photo') {
       const key = (staff ?? application).photoKey;
       if (!key) throw new ApiError(404, 'Photo unavailable.');
@@ -189,7 +195,199 @@ export class MemberService {
   async post(form, token, address) {
     const action = text(form, 'action', 40);
 
+    if (action === 'check-payment-status') {
+      if (!token) {
+        throw new ApiError(401, 'Please sign in again.');
+      }
+
+      const requestId = text(form, 'requestId', 128);
+      const identity = await this.identity(token);
+
+      const paymentRequest =
+        await this.repo.paymentRequest(requestId);
+
+      if (!paymentRequest) {
+        throw new ApiError(404, 'Payment request not found.');
+      }
+
+      const ownsRequest = paymentRequest.kind === 'REGISTER'
+        ? identity.requestId === paymentRequest.id
+        : Boolean(
+            identity.staffId &&
+            paymentRequest.staffId === identity.staffId
+          );
+
+      if (!ownsRequest) {
+        throw new ApiError(403, 'You cannot check this payment.');
+      }
+
+      const savedPayment =
+        await this.repo.paymentTransactionByRequest(requestId);
+
+      if (!savedPayment ||
+          savedPayment.paymentMethod !== 'HITPAY') {
+        throw new ApiError(404, 'HitPay transaction not found.');
+      }
+
+      if (savedPayment.paymentStatus === 'PAID') {
+        return {
+          success: true,
+          paymentStatus: 'PAID',
+          invoice: savedPayment.invoiceNo,
+          message: 'Payment was already confirmed.'
+        };
+      }
+
+      let savedDetails = savedPayment.terminalResponse;
+
+      if (typeof savedDetails === 'string') {
+        try {
+          savedDetails = JSON.parse(savedDetails);
+        } catch {
+          savedDetails = null;
+        }
+      }
+
+      const hitPayRequestId = savedDetails?.paymentRequestId;
+
+      if (!hitPayRequestId) {
+        throw new ApiError(
+          409,
+          'HitPay request ID is missing. Transaction reconciliation is required.'
+        );
+      }
+
+      if (!this.hitPayClient) {
+        throw new ApiError(503, 'HitPay is not configured.');
+      }
+
+      const providerResult =
+        await this.hitPayClient.getPaymentRequest(hitPayRequestId);
+
+      const providerStatus =
+        String(providerResult?.status ?? '').toLowerCase();
+
+      const providerAmount = Number(providerResult?.amount);
+      const expectedAmount = savedPayment.amountCents / 100;
+
+      const amountMatches =
+        Number.isFinite(providerAmount) &&
+        Math.round(providerAmount * 100) === savedPayment.amountCents;
+
+      const currencyMatches =
+        String(providerResult?.currency ?? '').toUpperCase() === 'MYR';
+
+      const referenceMatches =
+        String(providerResult?.reference_number ?? '') ===
+        savedPayment.invoiceNo;
+
+      // Verify the provider's invoice reference, amount and currency.
+      if (!referenceMatches || !amountMatches || !currencyMatches) {
+        console.error('[HITPAY] Payment verification mismatch:', {
+          invoiceNo: savedPayment.invoiceNo,
+          referenceMatches,
+          amountMatches,
+          currencyMatches
+        });
+
+        return {
+          success: false,
+          invoice: savedPayment.invoiceNo,
+          paymentStatus: 'UNKNOWN',
+          message:
+            'Payment details could not be verified. Please contact the administrator.'
+        };
+      }
+
+      // Payment is still awaiting confirmation.
+      if (providerStatus === 'pending') {
+        return {
+          success: false,
+          invoice: savedPayment.invoiceNo,
+          paymentStatus: 'PENDING',
+          message: 'HitPay has not confirmed the payment yet.'
+        };
+      }
+
+      // Payment has definitively failed, expired or been cancelled.
+      if (['failed', 'expired', 'canceled', 'cancelled'].includes(providerStatus)) {
+        const updatedPayment =
+          await this.repo.updatePaymentTransaction({
+            invoiceNo: savedPayment.invoiceNo,
+            paymentStatus: 'FAILED',
+            terminalResponse: {
+              ...savedDetails,
+              provider: 'HITPAY',
+              verifiedStatus: providerStatus,
+              verifiedAmount: providerResult.amount,
+              verifiedCurrency: providerResult.currency,
+              verifiedReference: providerResult.reference_number,
+              verifiedAt: new Date().toISOString()
+            }
+          });
+
+        if (!updatedPayment) {
+          throw new ApiError(500, 'Unable to update the payment status.');
+        }
+
+        return {
+          success: false,
+          invoice: savedPayment.invoiceNo,
+          requestId,
+          paymentStatus: 'FAILED',
+          message: `HitPay payment was ${providerStatus}. You may try again.`
+        };
+      }
+
+      // Never treat an unrecognized status as a successful payment.
+      if (providerStatus !== 'completed') {
+        return {
+          success: false,
+          invoice: savedPayment.invoiceNo,
+          paymentStatus: 'UNKNOWN',
+          message:
+            'HitPay returned an unrecognized payment status. Reconciliation is required.'
+        };
+      }
+
+      const updatedPayment =
+        await this.repo.updatePaymentTransaction({
+          invoiceNo: savedPayment.invoiceNo,
+          paymentStatus: 'PAID',
+          terminalResponse: {
+            ...savedDetails,
+            provider: 'HITPAY',
+            verifiedStatus: providerStatus,
+            verifiedAmount: providerResult.amount,
+            verifiedCurrency: providerResult.currency,
+            verifiedAt: new Date().toISOString()
+          }
+        });
+
+      if (!updatedPayment) {
+        throw new ApiError(
+          500,
+          'Payment was confirmed but the database update failed. Reconciliation is required.'
+        );
+      }
+
+      if (paymentRequest.kind === 'RENEW') {
+        await this.repo.activatePaidRenewal(requestId);
+      }
+
+      return {
+        success: true,
+        invoice: savedPayment.invoiceNo,
+        requestId,
+        paymentStatus: 'PAID',
+        message: paymentRequest.kind === 'REGISTER'
+          ? 'Payment confirmed. Your registration is pending admin approval.'
+          : 'Payment confirmed. Your membership renewal has been processed.'
+      };
+    }
+
 if (action === 'request-otp') {
+  if (!this.otpEnabled) throw new ApiError(403, 'WhatsApp OTP is temporarily disabled.');
   this.limit(`otp-ip:${address}`, 10, 15 * 60000);
 
   const number = otpPhone(form);
@@ -200,8 +398,9 @@ if (action === 'request-otp') {
 if (purpose === 'login') {
 
   const staff = await this.repo.staffByPhone(number);
+  const application = staff ? null : await this.repo.applicationByPhone(number);
 
-  if (!staff) {
+  if (!staff && !application) {
     throw new ApiError(401, 'This WhatsApp number is not registered.');
   }
 
@@ -243,6 +442,7 @@ if (purpose === 'login') {
 }
 
 if (action === 'verify-otp') {
+  if (!this.otpEnabled) throw new ApiError(403, 'WhatsApp OTP is temporarily disabled.');
   this.limit(`otp-verify-ip:${address}`, 10, 15 * 60000);
 
   const number = otpPhone(form);
@@ -280,31 +480,30 @@ if (action === 'verify-otp') {
 
     if (action === 'login') {
       this.limit(`login-ip:${address}`, 30, 15 * 60000);
-      const id = text(form, 'memberId', 128, false);
-      if (!id) {
-        const number = otpPhone(form);
-        this.limit(`login-phone:${hash(number)}`, 10, 15 * 60000);
-        const staff = await this.repo.staffByPhone(number);
-        const application = staff ? null : await this.repo.applicationByPhone(number);
-        if (!staff && !application) throw new ApiError(401, 'No active member or pending registration found. New members, please register first.');
-        const sessionToken = `web_${randomBytes(32).toString('hex')}`;
-        await this.repo.createSession(hash(sessionToken), staff?.id ?? null, application?.id ?? null);
-        return { token: sessionToken };
+      const number = otpPhone(form);
+      this.limit(`login-phone:${hash(number)}`, 10, 15 * 60000);
+      if (this.otpEnabled) {
+        const registrationToken = text(form, 'registrationToken', 64, false);
+        const verificationKey = hash(registrationToken);
+        const verification = this.registrationTokens.get(verificationKey);
+        if (!verification || verification.expiresAt <= Date.now() || verification.phone !== number) {
+          this.registrationTokens.delete(verificationKey);
+          throw new ApiError(401, 'Verify your WhatsApp number before signing in.');
+        }
+        this.registrationTokens.delete(verificationKey);
       }
-      this.limit(`login-id:${hash(id.toLowerCase())}`, 10, 15 * 60000);
-      const number = phone(form);
-      const staff = await this.repo.staff(id, true);
-      const application = staff ? null : await this.repo.application(id);
-      const person = staff ?? application;
-      if (!person || !timingSafeEqual(Buffer.from(hash(phoneDigits(person.phone))), Buffer.from(hash(number)))) {
-        throw new ApiError(401, 'Member ID or phone number is incorrect.');
-      }
+      const staff = await this.repo.staffByPhone(number);
+      const application = staff ? null : await this.repo.applicationByPhone(number);
+      if (!staff && !application) throw new ApiError(401, 'This WhatsApp number is not registered.');
       const sessionToken = `web_${randomBytes(32).toString('hex')}`;
       await this.repo.createSession(hash(sessionToken), staff?.id ?? null, application?.id ?? null);
       return { token: sessionToken };
     }
     if (action === 'logout') {
-      if (/^web_[a-f0-9]{64}$/.test(token ?? '')) await this.repo.logout(hash(token));
+      if (/^web_[a-f0-9]{64}$/.test(token ?? '')) {
+        const tokenHash = hash(token);
+        await this.repo.logout(tokenHash);
+      }
       return { ok: true };
     }
     if (action === 'register' || action === 'renew') {
@@ -339,13 +538,14 @@ if (action === 'verify-otp') {
         phone: identity?.staff.phone ?? otpPhone(form), email: identity ? identity.staff.email : email(form) };
       let verificationKey, verification;
       if (action === 'register') {
-        verificationKey = hash(text(form, 'registrationToken', 64, false));
-        verification = this.registrationTokens.get(verificationKey);
-        if (!verification || verification.expiresAt <= Date.now() || verification.phone !== data.phone) {
-          throw new ApiError(401, 'Verify your WhatsApp number with OTP before registering.');
+        if (this.otpEnabled) {
+          verificationKey = hash(text(form, 'registrationToken', 64, false));
+          verification = this.registrationTokens.get(verificationKey);
+          if (!verification || verification.expiresAt <= Date.now() || verification.phone !== data.phone) {
+            throw new ApiError(401, 'Verify your WhatsApp number with OTP before registering.');
+          }
+          this.registrationTokens.delete(verificationKey);
         }
-        // Reserve synchronously so concurrent submissions cannot reuse verification.
-        this.registrationTokens.delete(verificationKey);
       }
       const images = [];
       try {
@@ -382,7 +582,8 @@ if (action === 'verify-otp') {
       }
     }
     if (action === 'update-profile') {
-      const { staffId } = await this.identity(token);
+      const identity = await this.identity(token);
+      const { staffId } = identity;
       if (!staffId) throw new ApiError(403, 'Registration must be approved first.');
       const birthDate = text(form, 'birthDate', 10, false);
       if (birthDate && (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) ||
@@ -398,7 +599,8 @@ if (action === 'verify-otp') {
       return { ok: true };
     }
     if (action === 'upload-photo') {
-      const { staffId } = await this.identity(token);
+      const identity = await this.identity(token);
+      const { staffId } = identity;
       if (!staffId) throw new ApiError(403, 'Registration must be approved first.');
       this.limit(`photo:${staffId}`, 10, 3600000);
       const photo = await this.preparePhoto(form.get('photo'));
@@ -412,8 +614,19 @@ if (action === 'verify-otp') {
     if (action === 'pay-membership') {
       const requestId = text(form, 'requestId', 128);
 
-      if (!this.sendSaleToTerminal) {
+      const paymentMethod =
+        text(form, 'paymentMethod', 30, false) || 'NEXGO_N86';
+
+      if (!['NEXGO_N86', 'HITPAY'].includes(paymentMethod)) {
+        throw new ApiError(400, 'Unsupported payment method.');
+      }
+
+      if (paymentMethod === 'NEXGO_N86' && !this.sendSaleToTerminal) {
         throw new ApiError(503, 'NEXGO payment is not configured.');
+      }
+
+      if (paymentMethod === 'HITPAY' && !this.hitPayClient) {
+        throw new ApiError(503, 'HitPay payment is not configured.');
       }
 
       if (!token) {
@@ -442,6 +655,18 @@ if (action === 'verify-otp') {
         await this.repo.paymentTransactionByRequest(requestId);
 
       if (existingPayment) {
+        if (existingPayment.paymentMethod !== paymentMethod) {
+          return {
+            success: false,
+            invoice: existingPayment.invoiceNo,
+            requestId,
+            amountCents: existingPayment.amountCents,
+            paymentStatus: existingPayment.paymentStatus,
+            message:
+              `A previous payment was started using ${existingPayment.paymentMethod}. Please check that transaction before choosing another payment method.`
+          };
+        }
+
         const status = existingPayment.paymentStatus;
 
         if (status === 'PAID') {
@@ -468,7 +693,7 @@ if (action === 'verify-otp') {
           };
         }
 
-        if (status === 'FAILED') {
+        if (status === 'FAILED' && paymentMethod !== 'HITPAY') {
           return {
             success: false,
             invoice: existingPayment.invoiceNo,
@@ -479,13 +704,17 @@ if (action === 'verify-otp') {
               'A previous payment attempt failed. Verify its final status before authorizing another attempt.'
           };
         }
+
+        // HITPAY: Previous payment is confirmed FAILED.
+        // Allow a new payment attempt with a new invoice number.
       }
 
       const invoiceNo =
         `N${randomUUID().replaceAll('-', '')}`;
 
-      const terminalInvoiceNo =
-        `T${randomBytes(5).toString('hex').toUpperCase()}`;
+      const terminalInvoiceNo = paymentMethod === 'NEXGO_N86'
+        ? `T${randomBytes(5).toString('hex').toUpperCase()}`
+        : null;
 
       let created;
 
@@ -496,7 +725,8 @@ if (action === 'verify-otp') {
           invoiceNo,
           terminalInvoiceNo,
           requestId,
-          workspaceId: paymentRequest.workspaceId
+          workspaceId: paymentRequest.workspaceId,
+          paymentMethod
         });
       } catch (error) {
         // Another request may have created the payment first.
@@ -534,6 +764,104 @@ if (action === 'verify-otp') {
           500,
           'Unable to prepare the payment transaction.'
         );
+      }
+
+      // HITPAY ONLINE PAYMENT
+      if (paymentMethod === 'HITPAY') {
+        const customer = identity.staff ?? identity.application;
+
+        if (!this.hitPayClient.returnUrl) {
+          throw new ApiError(
+            503,
+            'HitPay return URL is not configured.'
+          );
+        }
+
+        try {
+          const hitPayResponse =
+            await this.hitPayClient.createPaymentRequest({
+              amount: (payment.amountCents / 100).toFixed(2),
+              currency: 'MYR',
+              name: customer.name,
+              email: customer.email || undefined,
+              purpose: `Gym membership - ${paymentRequest.planName}`,
+              reference_number: invoiceNo,
+              redirect_url:
+                `${this.hitPayClient.returnUrl}?requestId=${encodeURIComponent(requestId)}&paymentReturn=hitpay`
+            });
+
+          if (!hitPayResponse?.id || !hitPayResponse?.url) {
+            throw new Error(
+              'HitPay did not return a valid checkout URL.'
+            );
+          }
+
+          const updatedPayment =
+            await this.repo.updatePaymentTransaction({
+              invoiceNo,
+              paymentStatus: 'PENDING',
+              terminalResponse: {
+                provider: 'HITPAY',
+                paymentRequestId: hitPayResponse.id,
+                checkoutUrl: hitPayResponse.url,
+                providerStatus: hitPayResponse.status
+              }
+            });
+
+          if (!updatedPayment) {
+            return {
+              success: false,
+              invoice: invoiceNo,
+              requestId,
+              paymentStatus: 'UNKNOWN',
+              message:
+                'HitPay checkout was created but the transaction could not be saved. Please reconcile before retrying.'
+            };
+          }
+
+          return {
+            success: true,
+            paymentMethod: 'HITPAY',
+            invoice: invoiceNo,
+            requestId,
+            amountCents: payment.amountCents,
+            paymentStatus: 'PENDING',
+            checkoutUrl: hitPayResponse.url,
+            hitPayRequestId: hitPayResponse.id,
+            message: 'Redirecting to HitPay checkout.'
+          };
+
+        } catch (error) {
+          console.error('[HITPAY] Checkout creation error:', {
+            invoiceNo,
+            message: String(
+              error.message ?? 'Unknown error'
+            ).slice(0, 300)
+          });
+
+          await this.repo.updatePaymentTransaction({
+            invoiceNo,
+            paymentStatus: 'UNKNOWN',
+            terminalResponse: {
+              provider: 'HITPAY',
+              message:
+                'Checkout creation outcome could not be confirmed.',
+              errorMessage: String(
+                error.message ?? 'Unknown error'
+              ).slice(0, 300)
+            }
+          }).catch(() => {});
+
+          return {
+            success: false,
+            invoice: invoiceNo,
+            requestId,
+            amountCents: payment.amountCents,
+            paymentStatus: 'UNKNOWN',
+            message:
+              'HitPay checkout status is uncertain. Check the transaction before retrying.'
+          };
+        }
       }
 
       try {

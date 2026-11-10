@@ -12,7 +12,7 @@ export class MemberRepository {
     request.input('workspace', sql.NVarChar(128), this.workspace);
     for (const [name, value] of Object.entries(parameters)) {
       request.input(name, Buffer.isBuffer(value) ? sql.VarBinary(sql.MAX) : value instanceof Date ? sql.DateTime2 :
-        typeof value === 'boolean' ? sql.Bit : sql.NVarChar(sql.MAX), value);
+        typeof value === 'boolean' ? sql.Bit : Number.isInteger(value) ? sql.Int : sql.NVarChar(sql.MAX), value);
     }
     return (await request.query(text)).recordset ?? [];
   }
@@ -104,11 +104,12 @@ async staffByPhone(phone) {
       AND expires_at>SYSUTCDATETIME()`, { hash }))[0];
   }
 
-  createSession(hash, staffId, requestId) {
+  // lifetimeHours defaults to the standard 7-day member session.
+  createSession(hash, staffId, requestId, lifetimeHours = 24 * 7) {
     return this.query(`INSERT INTO dbo.member_app_sessions
       (token_hash,staff_id,request_id,expires_at,created_at,workspace_id)
-      VALUES(@hash,@staffId,@requestId,DATEADD(day,7,SYSUTCDATETIME()),SYSUTCDATETIME(),@workspace)`,
-    { hash, staffId, requestId });
+      VALUES(@hash,@staffId,@requestId,DATEADD(hour,@hours,SYSUTCDATETIME()),SYSUTCDATETIME(),@workspace)`,
+    { hash, staffId, requestId, hours: lifetimeHours });
   }
 
   logout(hash) {
@@ -255,7 +256,10 @@ async staffByPhone(phone) {
 
   async workspaces() {
   return this.query(`
-    SELECT code, name
+    -- The API value is used as X-Workspace and must match
+    -- isapi_staff.workspace_id.  The display code is not always the
+    -- database workspace identifier.
+    SELECT id AS code, name
     FROM dbo.workspaces
     ORDER BY name
   `);
@@ -278,10 +282,23 @@ async staffByPhone(phone) {
   
 async createPaymentTransaction({
   invoiceNo,
-  terminalInvoiceNo,
+  terminalInvoiceNo = null,
   requestId,
-  workspaceId
+  workspaceId,
+  paymentMethod = 'NEXGO_N86'
 }) {
+  if (!['NEXGO_N86', 'HITPAY'].includes(paymentMethod)) {
+    throw new Error('Unsupported payment method.');
+  }
+
+  if (paymentMethod === 'NEXGO_N86' && !terminalInvoiceNo) {
+    throw new Error('Terminal invoice number is required for NEXGO.');
+  }
+
+  if (paymentMethod === 'HITPAY' && terminalInvoiceNo) {
+    throw new Error('HitPay must not use a terminal invoice number.');
+  }
+
   const rows = await this.query(`
     INSERT INTO dbo.member_payment_transactions
       (
@@ -301,6 +318,7 @@ async createPaymentTransaction({
       inserted.request_id AS requestId,
       inserted.workspace_id AS workspaceId,
       inserted.amount_cents AS amountCents,
+      inserted.payment_method AS paymentMethod,
       inserted.payment_status AS paymentStatus
     SELECT
       @invoiceNo,
@@ -309,7 +327,7 @@ async createPaymentTransaction({
       r.workspace_id,
       p.price_cents +
         CASE WHEN r.kind = 'REGISTER' THEN 6000 ELSE 0 END,
-      'NEXGO_N86',
+      @paymentMethod,
       'PENDING',
       SYSUTCDATETIME(),
       SYSUTCDATETIME()
@@ -331,7 +349,8 @@ async createPaymentTransaction({
     invoiceNo,
     terminalInvoiceNo,
     requestId,
-    paymentWorkspace: workspaceId
+    paymentWorkspace: workspaceId,
+    paymentMethod
   });
 
   return rows[0] ?? null;
@@ -375,6 +394,7 @@ async createPaymentTransaction({
         request_id AS requestId,
         workspace_id AS workspaceId,
         amount_cents AS amountCents,
+        payment_method AS paymentMethod,
         payment_status AS paymentStatus,
         terminal_response AS terminalResponse
       FROM dbo.member_payment_transactions
@@ -384,6 +404,49 @@ async createPaymentTransaction({
     `, { requestId });
 
     return rows[0] ?? null;
+  }
+
+  async paymentTransactionByInvoice(invoiceNo) {
+    const rows = await this.query(`
+      SELECT TOP (1)
+        id,
+        invoice_no AS invoiceNo,
+        request_id AS requestId,
+        workspace_id AS workspaceId,
+        amount_cents AS amountCents,
+        payment_method AS paymentMethod,
+        payment_status AS paymentStatus,
+        terminal_response AS terminalResponse
+      FROM dbo.member_payment_transactions
+      WHERE invoice_no = @invoiceNo
+        AND workspace_id = @workspace;
+    `, { invoiceNo });
+
+    return rows[0] ?? null;
+  }
+
+  async paymentTransactionsForMember(staffId, requestId) {
+    return this.query(`
+      SELECT TOP (100)
+        t.invoice_no AS invoiceNo,
+        t.request_id AS requestId,
+        t.amount_cents AS amountCents,
+        t.payment_method AS paymentMethod,
+        t.payment_status AS paymentStatus,
+        t.created_at AS createdAt,
+        t.updated_at AS updatedAt,
+        r.kind,
+        p.name AS planName
+      FROM dbo.member_payment_transactions t
+      INNER JOIN dbo.member_app_requests r
+        ON r.id = t.request_id AND r.workspace_id = t.workspace_id
+      LEFT JOIN dbo.membership_plans p
+        ON p.id = r.plan_id AND p.workspace_id = r.workspace_id
+      WHERE t.workspace_id = @workspace
+        AND ((@staffId IS NOT NULL AND r.staff_id = @staffId)
+          OR (@requestId IS NOT NULL AND r.id = @requestId))
+      ORDER BY t.created_at DESC, t.id DESC;
+    `, { staffId, requestId });
   }
 
   async reservePaymentRequest(requestId, invoiceNo) {
@@ -433,7 +496,11 @@ async createPaymentTransaction({
         inserted.amount_cents AS amountCents,
         inserted.payment_status AS paymentStatus
       WHERE invoice_no = @invoiceNo
-        AND workspace_id = @workspace;
+        AND workspace_id = @workspace
+        AND (
+          payment_status <> 'PAID'
+          OR @paymentStatus = 'PAID'
+        );
     `, {
       invoiceNo,
       paymentStatus,

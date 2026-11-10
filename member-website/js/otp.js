@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL = window.MEMBER_API_BASE_URL || "";
 
 const otpForm = document.getElementById("otpForm");
 const otpInput = document.getElementById("otp");
@@ -79,6 +79,7 @@ otpForm.addEventListener("submit", async (event) => {
         const loginForm = new FormData();
         loginForm.set("action", "login");
         loginForm.set("phone", phone);
+        loginForm.set("registrationToken", verifyData.registrationToken);
 
         const loginResponse = await fetch(
             `${API_BASE_URL}/api/member-app`,
@@ -99,6 +100,7 @@ otpForm.addEventListener("submit", async (event) => {
 
         // Step 3: Save login token for dashboard
         sessionStorage.setItem("memberToken", loginData.token);
+        sessionStorage.setItem("workspace", workspace);
 
         // Keep phone for reference
         sessionStorage.setItem("otpPhone", phone);

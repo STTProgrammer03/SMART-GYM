@@ -1,6 +1,6 @@
 ﻿import axios from 'axios';
 
-const TERMINAL_URL =
+const DEFAULT_TERMINAL_URL =
   process.env.NEXGO_TERMINAL_URL || 'http://192.168.2.193:33898/';
 
 function crc16(hex) {
@@ -289,11 +289,15 @@ export function buildSaleMessage(amountCents, invoice) {
   return '02' + data + crc16(data) + '03';
 }
 
-export async function sendSaleToTerminal(amountCents, invoice) {
+export async function sendSaleToTerminal(
+  amountCents,
+  invoice,
+  terminalUrl = DEFAULT_TERMINAL_URL
+) {
   const message = buildSaleMessage(amountCents, invoice);
 
   try {
-    const response = await axios.post(TERMINAL_URL, message, {
+    const response = await axios.post(terminalUrl, message, {
       headers: { 'Content-Type': 'text/plain' },
       timeout: 120000,
       responseType: 'text'
@@ -326,9 +330,11 @@ export async function sendSaleToTerminal(amountCents, invoice) {
 }
 
 
-export async function testTerminalConnection() {
+export async function testTerminalConnection(
+  terminalUrl = DEFAULT_TERMINAL_URL
+) {
   const response = await axios.post(
-    TERMINAL_URL,
+    terminalUrl,
     '02000C010B01C30000006A1003',
     {
       headers: { 'Content-Type': 'text/plain' },

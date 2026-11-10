@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Payment - U FITNESS GYM</title>
     <link rel="stylesheet" href="css/style.css">
+    <script src="js/config.js"></script>
+    <script>const API_BASE_URL = window.MEMBER_API_BASE_URL || "";</script>
 
     <style>
         body { background: linear-gradient(135deg, #f4f7fb, #eef2f7); }
@@ -166,6 +168,15 @@
             <span>💳 Debit / Credit Card</span>
         </label>
 
+        <label class="payment-method">
+            <input
+                type="radio"
+                name="paymentMethod"
+                value="HITPAY"
+            >
+            <span>Online Payment</span>
+        </label>
+
         
 
 
@@ -317,7 +328,7 @@
 
                 try {
                     const demoResponse = await fetch(
-                        "http://localhost:3000/api/nexgo/sale-test",
+                        `${API_BASE_URL}/api/nexgo/sale-test`,
                         {
                             method: "POST",
                             headers: {
@@ -361,13 +372,6 @@
                 return;
             }
 
-            if (selected.value !== "NEXGO_N86") {
-                message.textContent =
-                    "This payment method is not connected to NEXGO yet.";
-                message.style.color = "#b42318";
-                return;
-            }
-
             if (!requestId || !memberToken) {
                 message.textContent =
                     !requestId
@@ -387,9 +391,10 @@
                 const form = new FormData();
                 form.set("action", "pay-membership");
                 form.set("requestId", requestId);
+                form.set("paymentMethod", selected.value);
 
                 const response = await fetch(
-                    "http://localhost:3000/api/member-app",
+                    `${API_BASE_URL}/api/member-app`,
                     {
                         method: "POST",
                         headers: {
@@ -409,6 +414,16 @@
                     throw new Error(
                         `Backend returned an invalid response (HTTP ${response.status}). Check the payment status before trying again.`
                     );
+                }
+
+                if (
+                    result.paymentMethod === "HITPAY" &&
+                    result.checkoutUrl &&
+                    result.paymentStatus === "PENDING"
+                ) {
+                    message.textContent = "Redirecting to HitPay...";
+                    window.location.assign(result.checkoutUrl);
+                    return;
                 }
 
                 if (!response.ok) {
@@ -448,6 +463,91 @@
             }
         });
 
+// ==========================================
+// HITPAY RETURN VERIFICATION
+// ==========================================
+
+(async function checkHitPayReturn() {
+    const params = new URLSearchParams(window.location.search);
+
+    if (params.get("paymentReturn") !== "hitpay") {
+        return;
+    }
+
+    const requestId = params.get("requestId");
+    const memberToken = sessionStorage.getItem("memberToken");
+    const workspace =
+        sessionStorage.getItem("workspace") ||
+        sessionStorage.getItem("memberWorkspace");
+
+    const message = document.getElementById("paymentMessage");
+    const button = document.getElementById("paymentButton");
+
+    if (!requestId || !memberToken) {
+        message.textContent =
+            "Please sign in again to verify your payment.";
+        message.style.color = "#b54708";
+        return;
+    }
+
+    button.disabled = true;
+    message.textContent = "Verifying your HitPay payment...";
+    message.style.color = "#344054";
+
+    try {
+        const form = new FormData();
+        form.set("action", "check-payment-status");
+        form.set("requestId", requestId);
+
+        const response = await fetch(
+            `${API_BASE_URL}/api/member-app`,
+            {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${memberToken}`,
+                    ...(workspace ? { "X-Workspace": workspace } : {})
+                },
+                body: form,
+                signal: AbortSignal.timeout(30000)
+            }
+        );
+
+        const result = await response.json();
+
+        if (!response.ok) {
+            throw new Error(
+                result.error || "Unable to verify payment."
+            );
+        }
+
+        if (
+            result.paymentStatus === "PAID" &&
+            result.success === true
+        ) {
+            message.textContent = result.message;
+            message.style.color = "#027a48";
+
+            window.setTimeout(() => {
+                window.location.replace("dashboard.html");
+            }, 1500);
+
+        } else {
+            message.textContent =
+                result.message ||
+                "Payment is not confirmed yet. Please check again later.";
+            message.style.color = "#b54708";
+            button.disabled = false;
+        }
+
+    } catch (error) {
+        message.textContent =
+            error.message ||
+            "Unable to verify payment. Please contact the administrator.";
+        message.style.color = "#b42318";
+        button.disabled = false;
+    }
+})();
+
     // ==========================================
     // BACK LINK
     // ==========================================
@@ -476,5 +576,6 @@
 
 </script>
 
+<script src="js/config.js"></script>
 </body>
 </html>

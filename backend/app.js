@@ -1,8 +1,10 @@
 import { createServer } from 'node:http';
 import { ApiError } from './member-service.js';
+import { verifyHitPayWebhookSignature } from './hitpay.js';
 
 export function createApp({
   origins,
+  webhookSalt,
   checkDatabase,
   members,
   testTerminalConnection,
@@ -126,11 +128,11 @@ const maxAmountCents = nexgoMaxTestAmountCents;
     });
   }
 }
-    if (path === '/api/health' && request.method === 'GET') {
-      try {
-        await checkDatabase();
-        return send(200, { database: 'connected', memberApi: members ? 'ready' : 'pending-schema-mapping' });
-      } catch (_) {
+if (path === '/api/health' && request.method === 'GET') {
+  try {
+    await checkDatabase();
+    return send(200, { database: 'connected', memberApi: members ? 'ready' : 'pending-schema-mapping' });
+  } catch (_) {
         return send(503, { error: 'Database is unavailable. Check backend configuration.' });
       }
     }

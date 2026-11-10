@@ -17,11 +17,13 @@
                 <input type="text" id="fullName" autocomplete="name" maxlength="256" placeholder="Enter your full name" required>
                 <label for="phone">WhatsApp Number</label>
                 <input type="tel" id="phone" autocomplete="tel" maxlength="64" placeholder="e.g. 0167619166 or 60167619166" required>
-                <button type="button" id="sendOtpButton">Get WhatsApp OTP</button>
-                <p id="otpMessage" role="status" aria-live="polite"></p>
-                <label for="otp">WhatsApp OTP</label>
-                <input type="text" id="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code">
-                <button type="button" id="verifyOtpButton">Verify Number</button>
+                <div style="display:none">
+                    <button type="button" id="sendOtpButton">Get WhatsApp OTP</button>
+                    <p id="otpMessage" role="status" aria-live="polite"></p>
+                    <label for="otp">WhatsApp OTP</label>
+                    <input type="text" id="otp" inputmode="numeric" autocomplete="one-time-code" pattern="[0-9]{6}" maxlength="6" placeholder="6-digit code">
+                    <button type="button" id="verifyOtpButton">Verify Number</button>
+                </div>
                 <label for="planId">Membership Plan</label>
                 <select id="planId" required disabled><option value="">Loading plans...</option></select>
                 <p id="paymentInstructions" class="registration-payment"></p>
@@ -47,6 +49,7 @@
             <div class="register-section"><p>Already a member?</p><a href="index.html">Back to Login</a></div>
         </div>
     </div>
-    <script src="js/register.js?v=payment-flow-4"></script>
+    <script src="js/config.js"></script>
+    <script src="js/register.js?v=payment-flow-5"></script>
 </body>
 </html>

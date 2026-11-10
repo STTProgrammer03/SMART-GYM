@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Payment Transactions</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="dashboard-container payment-page">
+        <div class="dashboard-header">
+            <img src="assets/logo.png" alt="U FITNESS GYM Logo" class="gym-logo">
+            <div class="payment-title-row"><span class="payment-title-icon">▣</span><h1>Payment History</h1></div>
+            <p>Your payment transactions and membership records</p>
+        </div>
+        <div class="dashboard-card">
+            <button class="payment-back-button" type="button" onclick="window.location.href='dashboard.html'">← Back to Dashboard</button>
+            <div class="payment-summary"><div><strong id="totalCount">0</strong><small>Total Transactions</small></div><div class="summary-paid"><strong id="paidCount">0</strong><small>Paid</small></div><div class="summary-pending"><strong id="pendingCount">0</strong><small>Pending</small></div><div class="summary-unknown"><strong id="unknownCount">0</strong><small>Unknown</small></div></div>
+            <div class="payment-filters"><input id="paymentSearch" type="search" placeholder="Search by invoice number..."><select id="paymentStatusFilter"><option value="ALL">All Status</option><option value="PAID">Paid</option><option value="PENDING">Pending</option><option value="FAILED">Failed</option><option value="UNKNOWN">Unknown</option></select></div>
+            <button id="downloadPayments" class="payment-download-button" type="button" aria-label="Download payment history">↓</button>
+            <p id="paymentMessage" class="payment-message" role="status">Loading your transactions...</p>
+            <div id="paymentList"></div>
+        </div>
+    </div>
+    <script src="js/config.js"></script>
+    <script src="js/payments.js"></script>
+</body>
+</html>

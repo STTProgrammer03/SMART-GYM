@@ -1,179 +1,70 @@
-const API_BASE_URL = "http://localhost:3000";
-
-let selectedWorkspace = "";
-
+const API_BASE_URL = window.MEMBER_API_BASE_URL || "";
 const workspaceSelect = document.getElementById("workspace");
-const confirmGymBtn = document.getElementById("confirmGymBtn");
 const loginForm = document.getElementById("loginForm");
+const phoneInput = document.getElementById("phone");
+const loginButton = loginForm.querySelector('button[type="submit"]');
+const message = document.getElementById("message");
+let selectedWorkspace = "";
 
 async function loadWorkspaces() {
     try {
-        const response = await fetch(
-            `${API_BASE_URL}/api/member-app?view=workspaces`
-        );
-
+        const response = await fetch(`${API_BASE_URL}/api/member-app?view=workspaces`);
         const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.error || "Unable to load gyms.");
-        }
-
-        workspaceSelect.innerHTML =
-            '<option value="">Select your gym</option>';
-
+        if (!response.ok) throw new Error(data.error || "Unable to load gyms.");
+        workspaceSelect.innerHTML = '<option value="">Select your gym</option>';
         data.workspaces.forEach((workspace) => {
             const option = document.createElement("option");
-
             option.value = workspace.code;
             option.textContent = workspace.name;
-
             workspaceSelect.appendChild(option);
         });
     } catch (error) {
-        workspaceSelect.innerHTML =
-            '<option value="">Unable to load gyms</option>';
-
-        console.error(error);
+        workspaceSelect.innerHTML = '<option value="">Unable to load gyms</option>';
+        message.textContent = error.message || "Unable to load gyms.";
     }
 }
 
 loadWorkspaces();
 
-confirmGymBtn.addEventListener("click", () => {
-    const workspace = workspaceSelect.value;
-
-    if (!workspace) {
-        message.textContent = "Please select your gym.";
-        return;
-    }
-
-    selectedWorkspace = workspace;
-    sessionStorage.setItem("workspace", workspace);
-
-    workspaceSelect.disabled = true;
-    confirmGymBtn.disabled = true;
-
-    loginForm.style.display = "block";
-
-    message.textContent =
-        `Gym selected: ${workspaceSelect.options[workspaceSelect.selectedIndex].text}`;
-});
-
-const message = document.getElementById("message");
-const phoneInput = document.getElementById("phone");
-
-async function detectWorkspace(phone) {
-    const response = await fetch(`${API_BASE_URL}/api/member-app?view=workspace-for-phone&phone=${encodeURIComponent(phone)}`);
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Unable to find your gym.");
-    if (data.workspaces.length === 1) {
-        const found = data.workspaces[0];
-        selectedWorkspace = found.workspaceId;
+workspaceSelect.addEventListener("change", () => {
+    selectedWorkspace = workspaceSelect.value;
+    loginForm.style.display = selectedWorkspace ? "block" : "none";
+    if (selectedWorkspace) {
         sessionStorage.setItem("workspace", selectedWorkspace);
-        workspaceSelect.innerHTML = `<option value="${found.workspaceId}">${found.name}</option>`;
-        workspaceSelect.value = found.workspaceId;
-        workspaceSelect.disabled = true;
-        confirmGymBtn.disabled = true;
-        loginForm.style.display = "block";
-        message.textContent = `Gym found: ${found.name}`;
-    } else if (data.workspaces.length > 1) {
-        message.textContent = "This number is registered at more than one gym. Please select your gym.";
+        message.textContent = "Enter your registered WhatsApp number to sign in.";
+        phoneInput.focus();
+    } else {
+        sessionStorage.removeItem("workspace");
+        message.textContent = "";
     }
-}
-
-phoneInput.addEventListener("blur", () => {
-    if (phoneInput.value.trim()) detectWorkspace(phoneInput.value.trim()).catch(error => message.textContent = error.message);
 });
 
 loginForm.addEventListener("submit", async (event) => {
-
     event.preventDefault();
-
-
-    const phone =
-        document.getElementById("phone").value.trim();
-
-
-    if (!phone) {
-
-        message.textContent =
-            "Please enter your WhatsApp number.";
-
+    const phone = phoneInput.value.trim();
+    if (!phone || !selectedWorkspace) {
+        message.textContent = "Select your gym and enter your registered WhatsApp number.";
         return;
     }
-
-
-    message.textContent =
-        "Requesting WhatsApp OTP...";
-
-
-    const formData =
-        new FormData();
-
-    formData.append(
-        "action",
-        "request-otp"
-    );
-
-    formData.append(
-    "purpose",
-    "login"
-);
-
-    formData.append(
-        "phone",
-        phone
-    );
-
-
+    loginButton.disabled = true;
+    message.textContent = "Signing in...";
+    const form = new FormData();
+    form.set("action", "login");
+    form.set("phone", phone);
     try {
-
-        const response = await fetch(
-            `${API_BASE_URL}/api/member-app`,
-            {
-                method: "POST",
-                headers: { "X-Workspace": selectedWorkspace },
-                body: formData
-            }
-        );
-
-
-        const data =
-            await response.json();
-
-
-        if (!response.ok) {
-
-            throw new Error(
-                data.error ||
-                "Unable to request OTP."
-            );
-
-        }
-
-
-        // Remember the phone number
-        // for the OTP page.
-
-        sessionStorage.setItem(
-            "otpPhone",
-            phone
-        );
-
-
-        // Go to OTP page.
-
-        window.location.href =
-            "otp.html";
-
-
+        const response = await fetch(`${API_BASE_URL}/api/member-app`, {
+            method: "POST",
+            headers: { "X-Workspace": selectedWorkspace },
+            body: form
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to sign in.");
+        sessionStorage.setItem("memberToken", data.token);
+        sessionStorage.setItem("workspace", selectedWorkspace);
+        window.location.replace("dashboard.html");
     } catch (error) {
-
-        console.error(error);
-
-        message.textContent =
-            error.message;
-
+        message.textContent = error.message || "Unable to sign in.";
+    } finally {
+        loginButton.disabled = false;
     }
-
 });

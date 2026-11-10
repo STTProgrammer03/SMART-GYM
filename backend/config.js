@@ -59,3 +59,34 @@ export function serverConfig(env) {
       .split(',').map((value) => value.trim()).filter(Boolean),
   };
 }
+
+export function otpConfig(env) {
+  return { enabled: boolean(env.OTP_ENABLED, 'OTP_ENABLED', true) };
+}
+
+export function hitPayConfig(env) {
+  const environment = (env.HITPAY_ENV || 'sandbox').trim();
+
+  if (!['sandbox', 'production'].includes(environment)) {
+    throw new Error('HITPAY_ENV must be sandbox or production.');
+  }
+
+  return {
+    environment,
+    apiKey: env.HITPAY_API_KEY?.trim() || '',
+    salt: env.HITPAY_SALT?.trim() || '',
+    webhookSalt: env.HITPAY_WEBHOOK_SALT?.trim() || '',
+    baseUrl: environment === 'sandbox'
+      ? 'https://api.sandbox.hit-pay.com'
+      : 'https://api.hit-pay.com',
+    returnUrl: env.HITPAY_RETURN_URL?.trim() || '',
+    webhookUrl: env.HITPAY_WEBHOOK_URL?.trim() || '',
+  };
+}
+
+export function nexgoConfig(env) {
+  return {
+    terminalUrl: env.NEXGO_TERMINAL_URL?.trim()
+      || 'http://192.168.2.193:33898/'
+  };
+}

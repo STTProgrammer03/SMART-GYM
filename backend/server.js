@@ -1,10 +1,18 @@
-import { databaseConfig, serverConfig, loadEnvironment } from './config.js';
+import {
+  databaseConfig,
+  serverConfig,
+  otpConfig,
+  hitPayConfig,
+  nexgoConfig,
+  loadEnvironment
+} from './config.js';
 import { createDatabase, connectionError } from './database.js';
 import { createApp } from './app.js';
 import { MemberRepository } from './member-repository.js';
 import { MemberService } from './member-service.js';
 import { fileURLToPath } from 'node:url';
 import { createOtpSender } from './whatsapp.js';
+import { createHitPayClient } from './hitpay.js';
 import { resolve } from 'node:path';
 import {
   testTerminalConnection,
@@ -16,9 +24,19 @@ try {
   const env = loadEnvironment();
   let dbConfig;
   let config;
+  let otp;
+  let hitpay;
+  let hitPayClient;
+  let nexgo;
   try {
     dbConfig = databaseConfig(env);
     config = serverConfig(env);
+    otp = otpConfig(env);
+    hitpay = hitPayConfig(env);
+    hitPayClient = hitpay.apiKey
+      ? createHitPayClient(hitpay)
+      : null;
+    nexgo = nexgoConfig(env);
   } catch (error) {
     console.error(error.message);
     process.exitCode = 1;
@@ -29,14 +47,18 @@ try {
     const serviceByWorkspace = new Map();
     const server = createApp({
       origins: config.origins,
+      webhookSalt: hitpay.webhookSalt,
       checkDatabase: () => pool.request().query('SELECT 1 AS connected'),
 
-            testTerminalConnection,
-      sendSaleToTerminal,
+      testTerminalConnection: () =>
+        testTerminalConnection(nexgo.terminalUrl),
+
+      sendSaleToTerminal: (amountCents, invoice) =>
+        sendSaleToTerminal(amountCents, invoice, nexgo.terminalUrl),
       nexgoUatEnabled: env.NEXGO_UAT_ENABLED === 'true',
       nexgoMaxTestAmountCents: Number(env.NEXGO_MAX_TEST_AMOUNT_CENTS),
 
-members: (workspace = config.workspace) => {
+      members: (workspace = config.workspace) => {
         if (!serviceByWorkspace.has(workspace)) {
           serviceByWorkspace.set(workspace, new MemberService(
             new MemberRepository(pool, workspace),
@@ -45,8 +67,11 @@ members: (workspace = config.workspace) => {
               : fileURLToPath(new URL('uploads/', import.meta.url)),
             {
               sendOtp: createOtpSender(env),
-              sendSaleToTerminal
-            }
+              sendSaleToTerminal: (amountCents, invoice) =>
+                sendSaleToTerminal(amountCents, invoice, nexgo.terminalUrl),
+              hitPayClient,
+              otpEnabled: otp.enabled
+            },
           ));
         }
         return serviceByWorkspace.get(workspace);

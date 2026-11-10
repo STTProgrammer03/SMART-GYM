@@ -32,7 +32,7 @@
             <h1>Member Login</h1>
 
            <p class="subtitle">
-    Enter your registered WhatsApp number to receive an OTP.
+    Sign in with your registered WhatsApp number.
 </p>
 
 <div class="gym-selection">
@@ -43,16 +43,12 @@
     <select id="workspace" required>
         <option value="">Loading gyms...</option>
     </select>
-
-    <button type="button" id="confirmGymBtn">
-        Confirm Gym
-    </button>
 </div>
 
 <form id="loginForm" style="display: none;">
 
     <label for="phone">
-        WhatsApp Number
+        Registered Phone Number
     </label>
 
     <input
@@ -63,14 +59,12 @@
     >
 
     <button type="submit">
-        Get WhatsApp OTP
+        Login
     </button>
 
 </form>
 
 <p id="message" role="status" aria-live="polite"></p>
-
-            <p id="message"></p>
 
             <div class="register-section">
 
@@ -86,7 +80,8 @@
 
     </div>
 
-<script src="js/login.js?v=direct-login-2"></script>
+<script src="js/config.js"></script>
+<script src="js/login.js?v=otp-login-1"></script>
 
 </body>
 </html>

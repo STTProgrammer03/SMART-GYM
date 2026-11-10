@@ -17,13 +17,14 @@ const otpMessage = document.getElementById('otpMessage');
 const retryPlansButton = document.getElementById('retryPlansButton');
 const payNowButton = document.getElementById('payNowButton');
 const paymentStatus = document.getElementById('paymentStatus');
-let registrationToken = '';
+// OTP is temporarily disabled. The backend also enforces this setting.
+let registrationToken = 'otp-disabled';
 let verifiedUntil = 0;
 let resendAt = 0;
 let otpBusy = false;
 let otpOperation = '';
 function updateControls() {
-    if (registrationToken && Date.now() >= verifiedUntil) {
+    if (registrationToken && registrationToken !== 'otp-disabled' && Date.now() >= verifiedUntil) {
         registrationToken = '';
         otpMessage.textContent = 'Verification expired. Please request a new OTP.';
     }
@@ -93,9 +94,12 @@ async function post(fields) {
     return data;
 }
 phoneInput.addEventListener('input', () => {
-    registrationToken = '';
-    document.getElementById('otp').value = '';
-    otpMessage.textContent = 'Verify this WhatsApp number before registering.';
+    if (registrationToken !== 'otp-disabled') {
+        registrationToken = '';
+        document.getElementById('otp').value = '';
+        otpMessage.textContent = 'Verify this WhatsApp number before registering.';
+    }
+
     updateControls();
 });
 planInput.addEventListener('change', () => {

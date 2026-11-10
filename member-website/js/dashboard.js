@@ -1,4 +1,4 @@
-const API_BASE_URL = "http://localhost:3000";
+const API_BASE_URL = window.MEMBER_API_BASE_URL || "";
 const token = sessionStorage.getItem("memberToken");
 const workspace = sessionStorage.getItem("workspace");
 if (!token) window.location.replace("index.html");
@@ -70,7 +70,7 @@ async function loadMember() {
         if (!member.approved) {
             const notice = document.createElement("div");
             notice.id = "registrationNotice";
-            notice.className = "photo-warning";
+            notice.className = "registration-warning";
             const title = document.createElement("h3");
             title.textContent = member.registrationStatus === "REJECTED" ? "Registration not approved" : "Waiting for admin approval";
             const detail = document.createElement("p");
