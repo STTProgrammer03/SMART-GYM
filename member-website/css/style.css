@@ -1670,3 +1670,28 @@ a,
         height: 64px;
     }
 }
+
+/* Global button theme: light purple with white text on every page. */
+button,
+input[type="submit"],
+input[type="button"] {
+    background: #b9a7e8 !important;
+    border-color: #a18bd8 !important;
+    color: #ffffff !important;
+}
+
+button:hover,
+input[type="submit"]:hover,
+input[type="button"]:hover {
+    background: #9f88d6 !important;
+    border-color: #8d73c9 !important;
+    color: #ffffff !important;
+}
+
+button:disabled,
+input[type="submit"]:disabled,
+input[type="button"]:disabled {
+    background: #cfc5eb !important;
+    border-color: #c1b5e3 !important;
+    color: #ffffff !important;
+}

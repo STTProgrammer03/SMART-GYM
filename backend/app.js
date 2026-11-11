@@ -5,6 +5,7 @@ import { verifyHitPayWebhookSignature } from './hitpay.js';
 export function createApp({
   origins,
   webhookSalt,
+  findHitPayWorkspace,
   checkDatabase,
   members,
   testTerminalConnection,
@@ -134,6 +135,60 @@ if (path === '/api/health' && request.method === 'GET') {
     return send(200, { database: 'connected', memberApi: members ? 'ready' : 'pending-schema-mapping' });
   } catch (_) {
         return send(503, { error: 'Database is unavailable. Check backend configuration.' });
+      }
+    }
+    if (path === '/api/hitpay/webhook' && request.method === 'POST') {
+      try {
+        const chunks = [];
+        let size = 0;
+
+        for await (const chunk of request) {
+          size += chunk.length;
+
+          if (size > 256 * 1024) {
+            return send(413, { error: 'Webhook payload is too large.' });
+          }
+
+          chunks.push(chunk);
+        }
+
+        const rawBody = Buffer.concat(chunks);
+        const signature = request.headers['hitpay-signature'];
+
+        if (!verifyHitPayWebhookSignature(rawBody, signature, webhookSalt)) {
+          return send(401, { error: 'Invalid HitPay webhook signature.' });
+        }
+
+        let payload;
+        try {
+          payload = JSON.parse(rawBody.toString('utf8'));
+        } catch (_) {
+          return send(400, { error: 'Invalid HitPay webhook JSON.' });
+        }
+
+        const paymentRequestId = payload?.id;
+        if (!paymentRequestId) {
+          return send(400, { error: 'HitPay payment request ID is missing.' });
+        }
+
+        const workspace = await findHitPayWorkspace(paymentRequestId);
+        if (!workspace) {
+          return send(404, { error: 'HitPay payment workspace was not found.' });
+        }
+
+        const scopedMembers = typeof members === 'function'
+          ? members(workspace)
+          : members;
+
+        if (!scopedMembers) {
+          return send(503, { error: 'Member API setup is not complete.' });
+        }
+
+        const result = await scopedMembers.processHitPayWebhook(paymentRequestId);
+        return send(200, result);
+      } catch (error) {
+        console.error('HitPay webhook processing failed:', error);
+        return send(500, { error: 'Unable to process the HitPay webhook.' });
       }
     }
     if (path === '/api/member-app') {

@@ -957,4 +957,183 @@ if (action === 'verify-otp') {
 
     throw new ApiError(400, 'Unsupported action.');
   }
+
+  async processHitPayWebhook(paymentRequestId) {
+    if (!paymentRequestId) {
+      throw new Error('HitPay payment request ID is missing.');
+    }
+
+    if (!this.hitPayClient) {
+      throw new Error('HitPay is not configured.');
+    }
+
+    const savedPayment =
+      await this.repo.paymentTransactionByHitPayRequestId(
+        paymentRequestId
+      );
+
+    if (!savedPayment) {
+      throw new Error('HitPay transaction was not found.');
+    }
+
+    if (savedPayment.paymentMethod !== 'HITPAY') {
+      throw new Error('Transaction is not a HitPay payment.');
+    }
+
+    const paymentRequest =
+      await this.repo.paymentRequestForHitPay(
+        savedPayment.requestId
+      );
+
+    if (!paymentRequest) {
+      throw new Error('Membership payment request was not found.');
+    }
+
+    let savedDetails = savedPayment.terminalResponse;
+
+    if (typeof savedDetails === 'string') {
+      try {
+        savedDetails = JSON.parse(savedDetails);
+      } catch {
+        savedDetails = null;
+      }
+    }
+
+    if (savedDetails?.paymentRequestId !== paymentRequestId) {
+      throw new Error('HitPay payment request ID mismatch.');
+    }
+
+    const providerResult =
+      await this.hitPayClient.getPaymentRequest(
+        paymentRequestId
+      );
+
+    const providerStatus =
+      String(providerResult?.status ?? '').toLowerCase();
+
+    const providerAmount = Number(providerResult?.amount);
+
+    const amountMatches =
+      Number.isFinite(providerAmount) &&
+      Math.round(providerAmount * 100) ===
+        savedPayment.amountCents &&
+      savedPayment.amountCents === paymentRequest.amountCents;
+
+    const currencyMatches =
+      String(providerResult?.currency ?? '').toUpperCase() ===
+      'MYR';
+
+    const referenceMatches =
+      String(providerResult?.reference_number ?? '') ===
+      savedPayment.invoiceNo;
+
+    if (!amountMatches || !currencyMatches || !referenceMatches) {
+      console.error('[HITPAY WEBHOOK] Verification mismatch:', {
+        invoiceNo: savedPayment.invoiceNo,
+        amountMatches,
+        currencyMatches,
+        referenceMatches
+      });
+
+      throw new Error('HitPay payment verification failed.');
+    }
+
+    if (providerStatus === 'pending') {
+      return {
+        success: true,
+        paymentStatus: savedPayment.paymentStatus,
+        message: 'HitPay payment is still pending.'
+      };
+    }
+
+    if (['failed', 'expired', 'canceled', 'cancelled'].includes(providerStatus)) {
+      if (savedPayment.paymentStatus === 'PAID') {
+        throw new Error(
+          'HitPay reports a failed status for an already-paid transaction. Reconciliation required.'
+        );
+      }
+
+      const updatedPayment =
+        await this.repo.updatePaymentTransaction({
+          invoiceNo: savedPayment.invoiceNo,
+          paymentStatus: 'FAILED',
+          terminalResponse: {
+            ...savedDetails,
+            provider: 'HITPAY',
+            verifiedStatus: providerStatus,
+            verifiedAt: new Date().toISOString()
+          }
+        });
+
+      if (!updatedPayment) {
+        throw new Error('Unable to update failed payment status.');
+      }
+
+      return {
+        success: true,
+        paymentStatus: 'FAILED',
+        message: 'HitPay payment was not successful.'
+      };
+    }
+
+    if (providerStatus !== 'completed') {
+      throw new Error(
+        `Unrecognized HitPay payment status: ${providerStatus || 'empty'}`
+      );
+    }
+
+    const updatedPayment =
+      await this.repo.updatePaymentTransaction({
+        invoiceNo: savedPayment.invoiceNo,
+        paymentStatus: 'PAID',
+        terminalResponse: {
+          ...savedDetails,
+          provider: 'HITPAY',
+          verifiedStatus: 'completed',
+          verifiedAmount: providerResult.amount,
+          verifiedCurrency: providerResult.currency,
+          verifiedReference: providerResult.reference_number,
+          verifiedAt: new Date().toISOString()
+        }
+      });
+
+    if (!updatedPayment) {
+      throw new Error(
+        'Payment was confirmed but could not be saved.'
+      );
+    }
+
+    if (
+      paymentRequest.kind === 'RENEW' &&
+      paymentRequest.status === 'PENDING'
+    ) {
+      const activated =
+        await this.repo.activatePaidRenewal(
+          savedPayment.requestId
+        );
+
+      if (!activated) {
+        const latestRequest =
+          await this.repo.paymentRequestForHitPay(
+            savedPayment.requestId
+          );
+
+        if (latestRequest?.status !== 'APPROVED') {
+          throw new Error(
+            'Payment is confirmed but renewal activation needs reconciliation.'
+          );
+        }
+      }
+    }
+
+    return {
+      success: true,
+      invoice: savedPayment.invoiceNo,
+      requestId: savedPayment.requestId,
+      paymentStatus: 'PAID',
+      message: paymentRequest.kind === 'REGISTER'
+        ? 'Payment confirmed. Registration is pending admin approval.'
+        : 'Payment confirmed. Renewal has been processed.'
+    };
+  }
 }

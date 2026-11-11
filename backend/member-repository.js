@@ -386,6 +386,36 @@ async createPaymentTransaction({
     return rows[0] ?? null;
   }
 
+  async paymentRequestForHitPay(requestId) {
+    const rows = await this.query(`
+      SELECT
+        r.id,
+        r.kind,
+        r.staff_id AS staffId,
+        r.workspace_id AS workspaceId,
+        r.plan_id AS planId,
+        r.status,
+        p.name AS planName,
+        p.price_cents AS priceCents,
+        p.price_cents +
+          CASE WHEN r.kind = 'REGISTER' THEN 6000 ELSE 0 END
+          AS amountCents
+      FROM dbo.member_app_requests r
+      INNER JOIN dbo.membership_plans p
+        ON p.id = r.plan_id
+       AND p.workspace_id = r.workspace_id
+      WHERE r.id = @requestId
+        AND r.workspace_id = @workspace
+        AND r.status IN ('PENDING', 'APPROVED')
+        AND r.kind IN ('REGISTER', 'RENEW')
+        AND p.is_active = 1
+        AND p.deleted_at IS NULL
+        AND p.is_registration_fee = 0;
+    `, { requestId });
+
+    return rows[0] ?? null;
+  }
+
   async paymentTransactionByRequest(requestId) {
     const rows = await this.query(`
       SELECT TOP (1)
@@ -402,6 +432,29 @@ async createPaymentTransaction({
         AND workspace_id = @workspace
       ORDER BY created_at DESC, id DESC;
     `, { requestId });
+
+    return rows[0] ?? null;
+  }
+
+  async paymentTransactionByHitPayRequestId(paymentRequestId) {
+    const rows = await this.query(`
+      SELECT TOP (1)
+        id,
+        invoice_no AS invoiceNo,
+        request_id AS requestId,
+        workspace_id AS workspaceId,
+        amount_cents AS amountCents,
+        payment_method AS paymentMethod,
+        payment_status AS paymentStatus,
+        terminal_response AS terminalResponse
+      FROM dbo.member_payment_transactions
+      WHERE payment_method = 'HITPAY'
+        AND JSON_VALUE(
+          terminal_response,
+          '$.paymentRequestId'
+        ) = @paymentRequestId
+        AND workspace_id = @workspace;
+    `, { paymentRequestId });
 
     return rows[0] ?? null;
   }
@@ -513,56 +566,80 @@ async createPaymentTransaction({
   }
 
   async activatePaidRenewal(requestId) {
-    const rows = await this.query(`
-      DECLARE @now datetime2 = SYSUTCDATETIME();
+    return this.transaction(async (repo) => {
+      const rows = await repo.query(`
+        SET NOCOUNT ON;
 
-      UPDATE m
-      SET plan_id = r.plan_id,
-          valid_end = DATEADD(
-            month,
-            CASE WHEN UPPER(p.duration_unit) = 'MONTHS'
-              THEN COALESCE(p.duration_value, p.duration_days, 0) ELSE 0 END,
-            DATEADD(
-              day,
-              CASE WHEN UPPER(p.duration_unit) = 'DAYS'
-                THEN COALESCE(p.duration_value, p.duration_days, 0) ELSE 0 END,
-              CASE WHEN m.valid_end > @now THEN m.valid_end ELSE @now END
-            )
-          ),
-          status = 'ACTIVE',
-          registration_paid = 1,
-          updated_at = @now
-      FROM dbo.memberships m
-      INNER JOIN dbo.member_app_requests r
-        ON r.staff_id = m.staff_id
-      INNER JOIN dbo.isapi_staff s
-        ON s.id = m.staff_id
-       AND s.workspace_id = r.workspace_id
-      INNER JOIN dbo.membership_plans p
-        ON p.id = r.plan_id
-       AND p.workspace_id = r.workspace_id
-      WHERE r.id = @requestId
-        AND r.workspace_id = @workspace
-        AND r.kind = 'RENEW'
-        AND r.status = 'PENDING'
-        AND p.is_active = 1
-        AND p.deleted_at IS NULL;
+        DECLARE @now datetime2 = SYSUTCDATETIME();
+        DECLARE @requestFound bit = 0;
 
-      IF @@ROWCOUNT = 0
-        THROW 50004, 'Existing membership renewal could not be activated.', 1;
+        -- Lock the pending renewal request.
+        SELECT @requestFound = 1
+        FROM dbo.member_app_requests WITH (UPDLOCK, HOLDLOCK)
+        WHERE id = @requestId
+          AND workspace_id = @workspace
+          AND kind = 'RENEW'
+          AND status = 'PENDING';
 
-      UPDATE dbo.member_app_requests
-      SET status = 'APPROVED',
-          reviewed_at = @now,
-          updated_at = @now
-      WHERE id = @requestId
-        AND workspace_id = @workspace
-        AND kind = 'RENEW'
-        AND status = 'PENDING';
+        IF @requestFound = 0
+        BEGIN
+          SELECT CAST(0 AS bit) AS activated;
+          RETURN;
+        END;
 
-      SELECT CAST(1 AS bit) AS activated;
-    `, { requestId });
+        UPDATE m
+        SET plan_id = r.plan_id,
+            valid_end = DATEADD(
+              month,
+              CASE WHEN UPPER(p.duration_unit) = 'MONTHS'
+                THEN COALESCE(p.duration_value, p.duration_days, 0)
+                ELSE 0 END,
+              DATEADD(
+                day,
+                CASE WHEN UPPER(p.duration_unit) = 'DAYS'
+                  THEN COALESCE(p.duration_value, p.duration_days, 0)
+                  ELSE 0 END,
+                CASE WHEN m.valid_end > @now THEN m.valid_end ELSE @now END
+              )
+            ),
+            status = 'ACTIVE',
+            registration_paid = 1,
+            updated_at = @now
+        FROM dbo.memberships m
+        INNER JOIN dbo.member_app_requests r
+          ON r.staff_id = m.staff_id
+        INNER JOIN dbo.isapi_staff s
+          ON s.id = m.staff_id
+         AND s.workspace_id = r.workspace_id
+        INNER JOIN dbo.membership_plans p
+          ON p.id = r.plan_id
+         AND p.workspace_id = r.workspace_id
+        WHERE r.id = @requestId
+          AND r.workspace_id = @workspace
+          AND r.kind = 'RENEW'
+          AND r.status = 'PENDING'
+          AND p.is_active = 1
+          AND p.deleted_at IS NULL;
 
-    return rows[0]?.activated === true;
+        IF @@ROWCOUNT = 0
+          THROW 50004, 'Existing membership renewal could not be activated.', 1;
+
+        UPDATE dbo.member_app_requests
+        SET status = 'APPROVED',
+            reviewed_at = @now,
+            updated_at = @now
+        WHERE id = @requestId
+          AND workspace_id = @workspace
+          AND kind = 'RENEW'
+          AND status = 'PENDING';
+
+        IF @@ROWCOUNT = 0
+          THROW 50005, 'Renewal request status could not be updated.', 1;
+
+        SELECT CAST(1 AS bit) AS activated;
+      `, { requestId });
+
+      return rows[0]?.activated === true;
+    });
   }
 }

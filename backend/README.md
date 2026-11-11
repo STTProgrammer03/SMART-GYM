@@ -1,10 +1,19 @@
 # SQL Server backend setup
 
-## WhatsApp OTP
+## Website login and WhatsApp OTP
+
+The HTML member website currently offers temporary phone-only login for approved
+demonstration accounts. Enable it only in the local backend `.env` with
+`DEMO_LOGIN_ENABLED=true` and an explicit comma-separated `DEMO_LOGIN_PHONES`
+allowlist. The backend also requires the phone to match an active member in the
+selected workspace. Login creates a normal workspace-scoped session that expires
+after 12 hours. Set `DEMO_LOGIN_ENABLED=false` to turn this bypass off.
+
+The existing OTP page and backend OTP handling remain available. OTP login
+requires the phone-bound verification token returned by OTP verification; the
+website's current login page does not request or verify an OTP.
 
 New-member registration requests a six-digit WhatsApp code through Periskope.
-Existing members sign in with their phone number only; no OTP is sent for login.
-This is an identifier-only login: anyone who knows a member number can access that account.
 Set `PERISKOPE_API_KEY`, `PERISKOPE_PHONE` (your connected sender number with
 country code, or Periskope phone ID), and `PERISKOPE_BASE_URL` in `backend/.env`.
 The default API URL is `https://api.periskope.app/v1`. Restart the backend after
@@ -27,9 +36,6 @@ codes and limits; multiple server instances require a shared OTP/rate-limit stor
 Run `npm.cmd test` for offline checks; this does not run `test-periskope.js`,
 which sends a real WhatsApp message. To test live, restart the server, request
 a code from the registration page, check WhatsApp, and enter it before expiry.
-
-The legacy `action=login` route still accepts member ID plus phone for existing
-clients. It must be removed or secured before requiring OTP for all public logins.
 
 ## Database setup
 
@@ -96,15 +102,16 @@ in `.env` scopes member lookups, plans, sessions and settings. Change it and
 restart the backend to use another workspace. This does not move any records;
 sessions from another workspace cannot access the selected workspace's data.
 
-Existing active members log in with their member/employee ID (or internal staff
-ID) and registered phone number, including its country code. Phone formatting
-spaces, plus signs, brackets and hyphens are ignored.
+Phone formatting spaces, plus signs, brackets and hyphens are ignored for login.
+The demonstration login only permits allowlisted active members in the workspace
+selected by the website.
 
 Registration collects full name, WhatsApp number verified by OTP, profile photo,
 membership plan and payment receipt. It creates a PENDING application with the
 selected plan_id and receipt_key and signs the applicant in. Existing members
-and pending applicants can sign in again using their phone number without OTP.
-Pending applicants retain pending-only access until administrator approval.
+and pending applicants can sign in again through verified OTP login when that
+flow is restored. Pending applicants retain pending-only access until
+administrator approval.
 Duplicate existing accounts or open registrations for the same number are rejected.
 The admin system can resolve new photo keys through dbo.media_files. Existing
 web/ photo keys and receipt keys still resolve through backend upload storage. Approval and device synchronization remain admin responsibilities.
@@ -120,11 +127,13 @@ backend/uploads. Back up both SQL and the upload folder. Only the signed-in
 member's own photo is exposed by this API. The admin website's rendering and
 cache behavior must be verified separately in that website.
 
-Session tokens are random and stored as SHA-256 hashes, expire after seven days,
-and are revoked on logout. Disabled members cannot use existing sessions.
+Session tokens are random and stored as SHA-256 hashes, expire after seven days
+for OTP login (12 hours for demonstration login), and are revoked on logout.
+Disabled members cannot use existing sessions.
 The process limits login and registration attempts; counters reset on restart.
-Member ID plus phone does not prove phone ownership. The HTML website intentionally uses phone-only login as requested; OTP is only
-for new registration.
+The HTML website intentionally uses phone-only login only for explicitly
+allowlisted demo accounts; OTP remains available for regular login restoration
+and new-member registration.
 This server binds to loopback; public hosting also needs HTTPS and durable uploads.
 
 Run `npm.cmd test` for unit/API checks. Run `node smoke-db.js` for the SQL-backed

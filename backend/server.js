@@ -48,6 +48,18 @@ try {
     const server = createApp({
       origins: config.origins,
       webhookSalt: hitpay.webhookSalt,
+      findHitPayWorkspace: async (paymentRequestId) => {
+        const result = await pool.request()
+          .input('paymentRequestId', paymentRequestId)
+          .query(`
+            SELECT TOP (1) workspace_id AS workspaceId
+            FROM dbo.member_payment_transactions
+            WHERE payment_method = 'HITPAY'
+              AND JSON_VALUE(terminal_response, '$.paymentRequestId') = @paymentRequestId
+          `);
+
+        return result.recordset[0]?.workspaceId ?? null;
+      },
       checkDatabase: () => pool.request().query('SELECT 1 AS connected'),
 
       testTerminalConnection: () =>
