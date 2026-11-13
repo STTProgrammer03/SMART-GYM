@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Member Login</title>
 
+    <!-- SMART GYM Favicon -->
+    <link rel="icon" type="image/png" href="assets/smart-gym-favicon.png">
+
     <link rel="stylesheet" href="css/style.css">
 </head>
 
@@ -16,11 +19,11 @@
 
     <img
         src="assets/logo.png"
-        alt="U FITNESS GYM Logo"
+        alt="SMART GYM Logo"
         class="gym-logo"
     >
 
-    <h2>U FITNESS GYM</h2>
+    <h2>SMART GYM</h2>
 
     <p>Member Portal</p>
 
@@ -36,13 +39,12 @@
 </p>
 
 <div class="gym-selection">
-    <label for="workspace">
-        Choose Your Gym
-    </label>
-
-    <select id="workspace" required>
-        <option value="">Loading gyms...</option>
-    </select>
+    <label for="gymSearch">Choose Your Gym</label>
+    <div class="gym-autocomplete">
+        <input type="search" id="gymSearch" placeholder="Search your gym name..." autocomplete="off" aria-autocomplete="list" aria-controls="gymSuggestions">
+        <div id="gymSuggestions" class="gym-suggestions" role="listbox" hidden></div>
+    </div>
+    <button type="button" id="confirmGymButton" disabled>Confirm Gym</button>
 </div>
 
 <form id="loginForm" style="display: none;">
@@ -81,7 +83,7 @@
     </div>
 
 <script src="js/config.js"></script>
-<script src="js/login.js?v=otp-login-1"></script>
+<script src="js/login.js?v=gym-select-3"></script>
 
 </body>
 </html>

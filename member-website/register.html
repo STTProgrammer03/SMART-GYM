@@ -8,10 +8,10 @@
 </head>
 <body>
     <div class="login-container">
-        <div class="gym-title"><h1>U FITNESS GYM</h1><p>Member Portal</p></div>
+        <div class="gym-title"><h1>SMART GYM</h1><p>Member Portal</p></div>
         <div class="login-card">
             <h1>New Member</h1>
-            <p class="subtitle">Verify your WhatsApp number, choose a membership plan, and upload your payment receipt.</p>
+            <p class="subtitle">Verify your WhatsApp number and choose a membership plan.</p>
             <form id="registerForm">
                 <label for="fullName">Full Name</label>
                 <input type="text" id="fullName" autocomplete="name" maxlength="256" placeholder="Enter your full name" required>
@@ -36,16 +36,19 @@
 <p id="paymentStatus" class="registration-payment"></p>
 
 <button type="button" id="retryPlansButton" hidden>Reload Plans</button>
-                <label for="receipt">Payment Receipt</label>
-                <input type="file" id="receipt" accept="image/jpeg,image/png,image/webp">
-                <p class="photo-help">Upload your payment receipt as JPEG, PNG or WebP, maximum 5 MB.</p>
+                <!-- Receipt upload is temporarily disabled. Remove hidden to re-enable it. -->
+                <div id="receiptUploadSection" hidden>
+                    <label for="receipt">Payment Receipt</label>
+                    <input type="file" id="receipt" accept="image/jpeg,image/png,image/webp">
+                    <p class="photo-help">Upload your payment receipt as JPEG, PNG or WebP, maximum 5 MB.</p>
+                </div>
                 <label for="photo">Profile Photo</label>
                 <input type="file" id="photo" accept="image/jpeg,image/png,image/webp" required>
                 <p class="photo-help">Choose a clear photo of your face. Good lighting, one person, no sunglasses or face covering. JPEG, PNG or WebP, maximum 5 MB.</p>
                 <img id="registrationPhotoPreview" alt="Selected profile photo" hidden style="width:100%;max-height:240px;object-fit:contain;margin-bottom:16px;border-radius:10px">
                 <button type="submit" id="registerButton" disabled>Submit Registration</button>
             </form>
-            <p id="message" role="status" aria-live="polite">Your registration and payment receipt will be reviewed by the gym before membership is activated.</p>
+            <p id="message" role="status" aria-live="polite">Your registration will be reviewed by the gym before membership is activated.</p>
             <div class="register-section"><p>Already a member?</p><a href="index.html">Back to Login</a></div>
         </div>
     </div>

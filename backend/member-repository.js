@@ -217,6 +217,14 @@ async staffByPhone(phone) {
       IF @@ROWCOUNT=0 THROW 50001, 'Plan unavailable', 1;`, data);
   }
 
+  completeRegistration(id, photoKey, receiptKey) {
+    return this.query(`UPDATE dbo.member_app_requests
+      SET photo_key=@photoKey, receipt_key=@receiptKey, updated_at=SYSUTCDATETIME()
+      WHERE workspace_id=@workspace AND id=@id AND kind='REGISTER' AND status IN ('PENDING','PROCESSING');
+      IF @@ROWCOUNT=0 THROW 50004, 'Registration request unavailable', 1;`,
+      { id, photoKey, receiptKey });
+  }
+
   updateProfile(staffId, data) {
     return this.query(`UPDATE dbo.isapi_staff SET full_name=@name,whatsapp_number=@phone,
       email=@email,photo_key=COALESCE(@photoKey,photo_key),updated_at=SYSUTCDATETIME() WHERE workspace_id=@workspace AND id=@staffId;

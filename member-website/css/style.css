@@ -352,8 +352,9 @@ body {
 .payment-title-row { display: flex; justify-content: center; align-items: center; gap: 8px; }
 .payment-title-icon { color: #7952c7; font-size: 22px; }
 .payment-toolbar { display: flex; justify-content: space-between; margin-bottom: 27px; }
-.payment-download-button { border: 0; border-radius: 50%; width: 40px; height: 40px; background: #625d68; color: white; font-size: 22px; cursor: pointer; }
-.payment-back-button { color: #000 !important; }
+.payment-download-button { border: 0; border-radius: 8px; padding: 10px 16px; background: #625d68; color: white; font-size: 13px; font-weight: 700; cursor: pointer; }
+.payment-download-button:hover { background: #514c5b; }
+.payment-back-button { color: #ffffff !important; }
 .payment-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 18px; }
 .payment-summary > div { padding: 12px; border: 1px solid #e5e0f7; border-radius: 10px; background: #f7f4ff; color: #40365b; }
 .payment-summary strong, .payment-summary small { display: block; }
@@ -401,7 +402,7 @@ button,
 #photoDialog button {
     background: linear-gradient(135deg, #60418a, #92939d);
     border-color: #6d5b8b;
-    color: #000;
+    color: #ffffff;
 }
 
 button:hover,
@@ -1652,6 +1653,27 @@ a,
     background: #dbeafe;
 }
 
+.dashboard-edit-profile-button {
+    margin-left: auto;
+    padding: 9px 16px;
+    border: 1px solid #4b5563;
+    border-radius: 8px;
+    background: #4b5563;
+    color: #ffffff !important;
+    font-size: 12px;
+    font-weight: 700;
+    text-decoration: none;
+    white-space: nowrap;
+    box-shadow: 0 2px 5px rgba(31, 41, 55, 0.15);
+}
+
+.dashboard-edit-profile-button:hover {
+    background: #374151;
+    border-color: #374151;
+    color: #ffffff !important;
+    transform: translateY(-1px);
+}
+
 @media (max-width: 480px) {
     .membership-welcome {
         padding: 20px 16px;
@@ -1671,27 +1693,48 @@ a,
     }
 }
 
-/* Global button theme: light purple with white text on every page. */
+/* Global button theme: dark silver with white text on every page. */
 button,
 input[type="submit"],
 input[type="button"] {
-    background: #b9a7e8 !important;
-    border-color: #a18bd8 !important;
+    background: #4b5563 !important;
+    border-color: #374151 !important;
     color: #ffffff !important;
 }
 
 button:hover,
 input[type="submit"]:hover,
 input[type="button"]:hover {
-    background: #9f88d6 !important;
-    border-color: #8d73c9 !important;
+    background: #374151 !important;
+    border-color: #1f2937 !important;
     color: #ffffff !important;
 }
 
 button:disabled,
 input[type="submit"]:disabled,
 input[type="button"]:disabled {
-    background: #cfc5eb !important;
-    border-color: #c1b5e3 !important;
+    background: #6b7280 !important;
+    border-color: #4b5563 !important;
     color: #ffffff !important;
 }
+/* Membership transaction history */
+.membership-transactions-section { background: #f4f4f4; border-radius: 14px; }
+.membership-transactions-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; }
+.membership-transactions-header h2 { margin-bottom: 8px; }
+.membership-transactions-header p { color: #666; font-size: 13px; margin-bottom: 14px; }
+.membership-section-badge { padding: 5px 10px; border-radius: 14px; background: #e8e8e8; color: #333; font-size: 12px; white-space: nowrap; }
+.membership-transaction-row { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 0; border-bottom: 1px solid #ddd; }
+.membership-transaction-row:last-child { border-bottom: 0; }
+.membership-transaction-row strong, .membership-transaction-row small { display: block; }
+.membership-transaction-row strong { font-size: 14px; }
+.membership-transaction-row small { margin-top: 5px; color: #666; font-size: 11px; }
+.membership-transaction-total { text-align: right; }
+.membership-transaction-status { display: inline-block; margin-top: 5px; padding: 4px 9px; border-radius: 14px; background: #ccefdc; color: #167342; font-size: 11px; font-weight: 700; }
+.membership-view-transactions { width: 100%; margin-top: 12px; padding: 10px; border: 1px solid #d5d5d5; border-radius: 8px; background: transparent !important; color: #333 !important; font-size: 13px; cursor: pointer; }
+.membership-view-transactions:hover { background: #e9e9e9 !important; }
+.gym-autocomplete { position: relative; }
+.gym-autocomplete input { width: 100%; }
+.gym-suggestions { position: absolute; z-index: 20; left: 0; right: 0; max-height: 220px; overflow-y: auto; margin-top: 4px; padding: 5px; border: 1px solid #d5d5d5; border-radius: 8px; background: #fff; box-shadow: 0 8px 18px rgba(31, 41, 55, .14); }
+.gym-suggestion { display: block; width: 100%; padding: 10px 12px; border: 0; border-radius: 6px; background: transparent !important; color: #302943 !important; text-align: left; font-size: 14px; cursor: pointer; }
+.gym-suggestion:hover, .gym-suggestion:focus { background: #f0ecf8 !important; outline: none; }
+.gym-suggestion-empty { padding: 10px 12px; color: #777381; font-size: 13px; }

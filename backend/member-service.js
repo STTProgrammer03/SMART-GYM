@@ -371,10 +371,6 @@ export class MemberService {
         );
       }
 
-      if (paymentRequest.kind === 'RENEW') {
-        await this.repo.activatePaidRenewal(requestId);
-      }
-
       return {
         success: true,
         invoice: savedPayment.invoiceNo,
@@ -382,8 +378,25 @@ export class MemberService {
         paymentStatus: 'PAID',
         message: paymentRequest.kind === 'REGISTER'
           ? 'Payment confirmed. Your registration is pending admin approval.'
-          : 'Payment confirmed. Your membership renewal has been processed.'
+          : 'Payment confirmed. Review and submit your renewal to update your membership.'
       };
+    }
+
+    if (action === 'confirm-renewal') {
+      if (!token) throw new ApiError(401, 'Please sign in again.');
+      const requestId = text(form, 'requestId', 128);
+      const identity = await this.identity(token);
+      const paymentRequest = await this.repo.paymentRequest(requestId);
+      if (!paymentRequest || paymentRequest.kind !== 'RENEW') throw new ApiError(404, 'Renewal request not found.');
+      if (!identity.staffId || paymentRequest.staffId !== identity.staffId) throw new ApiError(403, 'You cannot confirm this renewal.');
+      const payment = await this.repo.paymentTransactionByRequest(requestId);
+      if (!payment || payment.paymentStatus !== 'PAID') throw new ApiError(400, 'Payment has not been verified yet.');
+      const activated = await this.repo.activatePaidRenewal(requestId);
+      if (!activated) {
+        const latest = await this.repo.paymentRequestForHitPay(requestId);
+        if (latest?.status !== 'APPROVED') throw new ApiError(409, 'This renewal has already been processed or needs reconciliation.');
+      }
+      return { success: true, requestId, paymentStatus: 'PAID', message: 'Renewal confirmed and membership updated.' };
     }
 
 if (action === 'request-otp') {
@@ -549,7 +562,7 @@ if (action === 'verify-otp') {
       }
       const images = [];
       try {
-        const photo = action === 'register' ? await this.preparePhoto(form.get('photo')) : null;
+        const photo = action === 'register' ? await this.preparePhoto(form.get('photo'), false) : null;
         data.photoKey = photo?.storageKey ?? null;
         const receipt = form.get('receipt');
         data.paymentMethod =
@@ -580,6 +593,26 @@ if (action === 'verify-otp') {
         }
         throw error;
       }
+    }
+    if (action === 'complete-registration') {
+      const identity = await this.identity(token);
+      if (!identity.requestId) throw new ApiError(403, 'Registration session unavailable.');
+      const requestId = text(form, 'requestId', 128);
+      if (requestId !== identity.requestId) throw new ApiError(403, 'You cannot update this registration.');
+      const payment = await this.repo.paymentTransactionByRequest(requestId);
+      if (!payment || payment.paymentStatus !== 'PAID') throw new ApiError(400, 'Payment has not been confirmed yet.');
+      const photo = await this.preparePhoto(form.get('photo'));
+      const receipt = await this.saveImage(form.get('receipt'));
+      try {
+        await this.repo.transaction(async (repo) => {
+          await repo.savePhoto(photo);
+          await repo.completeRegistration(requestId, photo.storageKey, receipt);
+        });
+      } catch (error) {
+        await this.removeImages([photo.storageKey, receipt]);
+        throw error;
+      }
+      return { ok: true, status: 'PENDING', message: 'Registration submitted for gym approval.' };
     }
     if (action === 'update-profile') {
       const identity = await this.identity(token);
@@ -901,27 +934,6 @@ if (action === 'verify-otp') {
           };
         }
 
-        if (status === 'PAID' && paymentRequest.kind === 'RENEW') {
-          try {
-            await this.repo.activatePaidRenewal(requestId);
-          } catch (error) {
-            console.error('[NEXGO PAYMENT] Renewal activation failed after PAID.', {
-              invoiceNo,
-              terminalInvoiceNo,
-              errorMessage: String(error.message ?? 'Unknown error').slice(0, 300)
-            });
-
-            return {
-              success: false,
-              invoice: invoiceNo,
-              requestId,
-              amountCents: payment.amountCents,
-              paymentStatus: 'PAID',
-              message: 'Payment was approved, but membership activation needs reconciliation. Do not retry payment.'
-            };
-          }
-        }
-
         return {
           success: status === 'PAID',
           invoice: invoiceNo,
@@ -1103,29 +1115,6 @@ if (action === 'verify-otp') {
       );
     }
 
-    if (
-      paymentRequest.kind === 'RENEW' &&
-      paymentRequest.status === 'PENDING'
-    ) {
-      const activated =
-        await this.repo.activatePaidRenewal(
-          savedPayment.requestId
-        );
-
-      if (!activated) {
-        const latestRequest =
-          await this.repo.paymentRequestForHitPay(
-            savedPayment.requestId
-          );
-
-        if (latestRequest?.status !== 'APPROVED') {
-          throw new Error(
-            'Payment is confirmed but renewal activation needs reconciliation.'
-          );
-        }
-      }
-    }
-
     return {
       success: true,
       invoice: savedPayment.invoiceNo,
@@ -1133,7 +1122,7 @@ if (action === 'verify-otp') {
       paymentStatus: 'PAID',
       message: paymentRequest.kind === 'REGISTER'
         ? 'Payment confirmed. Registration is pending admin approval.'
-        : 'Payment confirmed. Renewal has been processed.'
+        : 'Payment confirmed. Review and submit your renewal to update your membership.'
     };
   }
 }

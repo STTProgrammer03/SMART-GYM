@@ -296,6 +296,8 @@ export async function sendSaleToTerminal(
 ) {
   const message = buildSaleMessage(amountCents, invoice);
 
+  console.log('[NEXGO DEBUG] Request:', message);
+
   try {
     const response = await axios.post(terminalUrl, message, {
       headers: { 'Content-Type': 'text/plain' },

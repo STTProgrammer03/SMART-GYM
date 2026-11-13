@@ -1,7 +1,12 @@
-﻿const API_BASE_URL = "http://localhost:3000";
-const workspace = sessionStorage.getItem("workspace") || "";
-const workspaceHeaders = workspace ? { "X-Workspace": workspace } : {};
+﻿const API_BASE_URL =
+    ["localhost", "127.0.0.1", "[::1]", "::1"].includes(window.location.hostname)
+        ? "http://localhost:3000"
+        : "https://membership-api.smartgogo.net";
+let workspace = sessionStorage.getItem("workspace") || "";
+let workspaceHeaders = workspace ? { "X-Workspace": workspace } : {};
 let registrationFeeCents = 0;
+// Set to true later to restore receipt upload and validation.
+const RECEIPT_UPLOAD_ENABLED = false;
 const registerForm = document.getElementById("registerForm");
 const photoInput = document.getElementById("photo");
 const preview = document.getElementById("registrationPhotoPreview");
@@ -17,6 +22,43 @@ const otpMessage = document.getElementById('otpMessage');
 const retryPlansButton = document.getElementById('retryPlansButton');
 const payNowButton = document.getElementById('payNowButton');
 const paymentStatus = document.getElementById('paymentStatus');
+const registrationParams = new URLSearchParams(window.location.search);
+const existingRequestId = registrationParams.get('requestId');
+if (registrationParams.get('paymentComplete') === '1') {
+    paymentStatus.textContent = 'Payment completed. Upload your profile photo, then submit your registration.';
+}
+const workspaceSelect = document.createElement("select");
+workspaceSelect.id = "registrationWorkspace";
+workspaceSelect.required = true;
+workspaceSelect.innerHTML = '<option value="">Loading gyms...</option>';
+const workspaceLabel = document.createElement("label");
+workspaceLabel.htmlFor = workspaceSelect.id;
+workspaceLabel.textContent = "Choose Your Gym";
+registerForm.prepend(workspaceSelect);
+registerForm.prepend(workspaceLabel);
+
+const workspaceReady = (async () => {
+    try {
+        const response = await fetch(`${window.MEMBER_API_BASE_URL || ""}/api/member-app?view=workspaces`);
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to load gyms.");
+        workspaceSelect.innerHTML = '<option value="">Select your gym</option>';
+        data.workspaces.forEach((item) => workspaceSelect.add(new Option(item.name, item.code)));
+        if (workspace && data.workspaces.some((item) => item.code === workspace)) workspaceSelect.value = workspace;
+    } catch (error) {
+        workspaceSelect.innerHTML = '<option value="">Unable to load gyms</option>';
+        message.textContent = error.message;
+    }
+})();
+
+workspaceSelect.addEventListener("change", () => {
+    workspace = workspaceSelect.value;
+    workspaceHeaders = workspace ? { "X-Workspace": workspace } : {};
+    if (workspace) sessionStorage.setItem("workspace", workspace);
+    else sessionStorage.removeItem("workspace");
+    planInput.disabled = true;
+    loadPlans();
+});
 // OTP is temporarily disabled. The backend also enforces this setting.
 let registrationToken = 'otp-disabled';
 let verifiedUntil = 0;
@@ -174,6 +216,13 @@ verifyOtpButton.addEventListener('click', async () => {
     finally { otpBusy = false; otpOperation = ''; updateControls(); }
 });
 async function loadPlans() {
+    await workspaceReady;
+    if (!workspace) {
+        planInput.innerHTML = '<option value="">Choose your gym first</option>';
+        planInput.disabled = true;
+        updateControls();
+        return;
+    }
     retryPlansButton.hidden = true;
 
     try {
@@ -256,7 +305,8 @@ registerForm.addEventListener("submit", async event => {
     const fullName = document.getElementById("fullName").value.trim();
     const phone = document.getElementById("phone").value.trim();
     const photo = photoInput.files[0];
-    const receipt = document.getElementById('receipt').files[0];
+    const receiptInput = document.getElementById('receipt');
+    const receipt = RECEIPT_UPLOAD_ENABLED && receiptInput ? receiptInput.files[0] : null;
     updateControls();
     if (!registrationToken) { message.textContent = 'Verify your WhatsApp number first.'; return; }
     if (!planInput.value) {
@@ -268,19 +318,26 @@ registerForm.addEventListener("submit", async event => {
         message.textContent = "Please choose a valid payment receipt image.";
         return;
     }
-    if (!fullName || !phone || !validPhoto(photo)) {
-        message.textContent = "Enter your name, WhatsApp number and a valid profile photo.";
+    if (RECEIPT_UPLOAD_ENABLED && existingRequestId && (!receipt || receipt.size === 0)) {
+        message.textContent = "Upload your payment receipt before submitting.";
+        return;
+    }
+    if (!fullName || !phone || (existingRequestId && !validPhoto(photo))) {
+        message.textContent = existingRequestId
+            ? "Choose a valid profile photo before submitting."
+            : "Enter your name and WhatsApp number.";
         return;
     }
     submitting = true;
     registerButton.disabled = true;
     message.textContent = "Submitting registration for admin approval...";
     const form = new FormData();
-    form.set("action", "register");
+    form.set("action", existingRequestId ? "complete-registration" : "register");
+    if (existingRequestId) form.set("requestId", existingRequestId);
     form.set("fullName", fullName);
     form.set("phone", phone);
     form.set("photo", photo);
-    if (receipt && receipt.size > 0) {
+    if (RECEIPT_UPLOAD_ENABLED && receipt && receipt.size > 0) {
         form.set("receipt", receipt);
     }
     form.set('planId', planInput.value);
@@ -296,6 +353,12 @@ registerForm.addEventListener("submit", async event => {
             if (response.status === 401) registrationToken = '';
             throw new Error(data.error || "Registration failed.");
         }
+        if (existingRequestId) {
+            message.textContent = data.message || "Registration submitted for gym approval.";
+            window.setTimeout(() => window.location.replace("dashboard.html"), 1000);
+            return;
+        }
+
         sessionStorage.setItem("memberToken", data.token);
 
         if (!data.id || !data.token) {

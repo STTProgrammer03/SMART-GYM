@@ -57,3 +57,10 @@ backend/uploads/
 *.zip
 u_gym_membership_website_clean/
 backend/.env.workspace-backup
+
+# Local backups, redacted copies and database diagnostics
+backend/*.backup
+backend/*redacted.js
+backend/check-payment-indexes.js
+backend/demo-find-test-account.js
+backend/hitpay-sandbox-test.mjs

@@ -185,6 +185,10 @@
         </button>
 
         <p id="paymentMessage" role="status"></p>
+        <div id="renewalConfirmation" hidden>
+            <p><strong>Payment verified.</strong> Review your renewal details above, then confirm to update your membership.</p>
+            <button type="button" id="confirmRenewalButton">Confirm Renewal</button>
+        </div>
 
         <p class="payment-note" id="paymentNote">
             <span aria-hidden="true">🔒</span>
@@ -225,6 +229,39 @@
 
     const isRenewal =
         type === "renewal";
+
+    const renewalConfirmation = document.getElementById("renewalConfirmation");
+    const confirmRenewalButton = document.getElementById("confirmRenewalButton");
+
+    async function showRenewalConfirmation() {
+        if (!isRenewal) {
+            window.location.replace("dashboard.html");
+            return;
+        }
+        document.getElementById("paymentButton").hidden = true;
+        renewalConfirmation.hidden = false;
+        confirmRenewalButton.addEventListener("click", async () => {
+            confirmRenewalButton.disabled = true;
+            document.getElementById("paymentMessage").textContent = "Updating your membership...";
+            const form = new FormData();
+            form.set("action", "confirm-renewal");
+            form.set("requestId", params.get("requestId") || "");
+            try {
+                const response = await fetch(`${API_BASE_URL}/api/member-app`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${sessionStorage.getItem("memberToken") || ""}` },
+                    body: form
+                });
+                const result = await response.json();
+                if (!response.ok || !result.success) throw new Error(result.error || result.message || "Unable to confirm renewal.");
+                document.getElementById("paymentMessage").textContent = result.message;
+                window.setTimeout(() => window.location.replace("dashboard.html"), 800);
+            } catch (error) {
+                document.getElementById("paymentMessage").textContent = error.message;
+                confirmRenewalButton.disabled = false;
+            }
+        }, { once: true });
+    }
 
 
     // ==========================================
@@ -438,9 +475,7 @@
                     message.textContent =
                         "Payment confirmed. Your membership is now active.";
                     message.style.color = "#027a48";
-                    window.setTimeout(() => {
-                        window.location.replace("dashboard.html");
-                    }, 800);
+                    showRenewalConfirmation();
                 } else if (result.paymentStatus === "FAILED") {
                     message.textContent =
                         result.message ||
@@ -527,9 +562,7 @@
             message.textContent = result.message;
             message.style.color = "#027a48";
 
-            window.setTimeout(() => {
-                window.location.replace("dashboard.html");
-            }, 1500);
+            showRenewalConfirmation();
 
         } else {
             message.textContent =

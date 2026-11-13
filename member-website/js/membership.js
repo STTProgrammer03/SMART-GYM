@@ -1,4 +1,7 @@
-const API_BASE_URL = window.MEMBER_API_BASE_URL || "";
+const API_BASE_URL =
+    ["localhost", "127.0.0.1", "[::1]", "::1"].includes(window.location.hostname)
+        ? "http://localhost:3000"
+        : "https://membership-api.smartgogo.net";
 
 const token = sessionStorage.getItem("memberToken");
 
@@ -598,8 +601,53 @@ function startRenewal() {
 // START
 // ==========================================
 
+async function loadMembershipTransactions() {
+    const container = document.getElementById("membershipTransactionHistory");
+    if (!container) return;
+
+    try {
+        const workspace = sessionStorage.getItem("workspace") || "";
+        const response = await fetch(`${API_BASE_URL}/api/member-app?view=payments`, {
+            headers: {
+                Authorization: `Bearer ${token}`,
+                ...(workspace ? { "X-Workspace": workspace } : {})
+            }
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.error || "Unable to load transactions.");
+
+        const payments = data.payments || [];
+        if (!payments.length) {
+            container.innerHTML = "<p>No membership transactions found.</p>";
+            return;
+        }
+
+        const money = cents => `RM${(Number(cents || 0) / 100).toFixed(2)}`;
+        const formatDate = value => value
+            ? new Date(value).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })
+            : "-";
+
+        container.innerHTML = payments.slice(0, 2).map(payment => `
+            <div class="membership-transaction-row">
+                <div>
+                    <strong>${payment.planName || payment.kind || "Membership Payment"}</strong>
+                    <small>${formatDate(payment.createdAt)} · ${payment.paymentMethod || "Payment"}</small>
+                </div>
+                <div class="membership-transaction-total">
+                    <strong>${money(payment.amountCents)}</strong>
+                    <span class="membership-transaction-status">${payment.paymentStatus || "Unknown"}</span>
+                </div>
+            </div>
+        `).join("");
+    } catch (error) {
+        container.innerHTML = `<p>Unable to load transaction history.</p>`;
+        console.error(error);
+    }
+}
+
 loadMembership();
 loadPlans();
+loadMembershipTransactions();
 
 async function submitRenewalRequest() {
     const selectedPlan =
